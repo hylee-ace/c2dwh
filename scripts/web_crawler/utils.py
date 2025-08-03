@@ -1,9 +1,14 @@
 from selenium.webdriver import Firefox, FirefoxOptions
 from bs4 import BeautifulSoup
-import os, threading, time
+import threading, time, functools
 
 
 class CustomDriver(Firefox):
+    """
+    Customized webdriver for Firefox browser. In latest Selenium, service is no longer necessary,
+    if facing any problems with GeckoDriver, uncomment service setup.
+    """
+
     def __init__(self):
         # service = FirefoxService()
         # service.path = "./geckodriver"
@@ -43,58 +48,74 @@ class Crawler:
         return data
 
 
-def runtime(func: object, *args, **kwargs):
-    """Estimate runtime of a process."""
-
-    val = None
-
-    # get func returned values
-    def return_val():
-        nonlocal val  # to make val public
-        try:
-            val = func(*args, **kwargs)
-            return val
-        except Exception as e:
-            print(f"[Error from {func}]. {e}")
-
-    # prepare thread
-    func_thread = threading.Thread(target=return_val)
-    func_thread.start()
-    start = time.time()
-
-    while func_thread.is_alive():
-        # runtime text
-        current = time.time() - start
-        m = 0
-        text = f"{current:.2f}s"
-
-        if current >= 60:
-            m = int(current / 60)
-            current = current % 60
-            text = f"{m}min{current:.2f}s"
-
-        print(f"\rRuntime: \033[33m{text}\033[0m", end="", flush=True)
-        time.sleep(0.1)
-
-    func_thread.join()
-
-    # endtime text
-    end = time.time() - start
-    m2 = 0
-    text2 = f"{end:.2f}s"
-
-    if end >= 60:
-        m2 = int(end / 60)
-        end = end % 60
-        text2 = f"{m2}min{end:.2f}s"
-
-    print("\rFinished in \033[32m{}\033[0m".format(text2))
-
-    return val
+# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-def colorized(text: str, *, color: str | int, bold: bool = False):
-    """Change printed text color in terminal."""
+def runtime(obj: object):
+    """
+    Decorator for estimating runtime of a process.
+    """
+
+    @functools.wraps(obj)
+    def wrapper(*args, **kwargs):
+        res = None
+        error = False
+        event = threading.Event()
+
+        def stopwatch():
+            global start
+            start = time.time()
+            while not event.is_set():
+                global now
+                now = time.time() - start
+                print(
+                    f"\rRuntime: {colorized(timetext(now),color=33)}",
+                    "\033[?25l",
+                    end="\r",
+                    flush=True,
+                )
+                time.sleep(0.1)
+
+        def get_obj_value():
+            nonlocal res, error
+            try:
+                res = obj(*args, **kwargs)
+            except Exception as e:
+                error = True
+                print(
+                    f"[{colorized('x',color=31,bold=True)}] Error occurs in {colorized(obj.__qualname__,color=31)} >> {e}"
+                )
+            finally:
+                event.set()
+
+        sw_thread = threading.Thread(target=stopwatch)
+        obj_thread = threading.Thread(target=get_obj_value)
+
+        obj_thread.start(), sw_thread.start()
+        sw_thread.join(), obj_thread.join()
+
+        if not error:
+            print(f"Finished in {colorized(timetext(now),color=32)}\033[?25h")
+
+        return res
+
+    return wrapper
+
+
+def colorized(text: str | int | float, *, color: str | int, bold: bool = False):
+    """
+    Change printed text color in terminal.
+
+    ---
+        _**BLACK**_: 30
+        _**RED**_: 31
+        _**GREEN**_: 32
+        _**YELLOW**_: 33
+        _**BLUE**_: 34
+        _**MAGENTA**_: 35
+        _**CYAN**_: 36
+        _**WHITE**_: 37
+    """
 
     msg = "Only support BLACK(30), RED(31), GREEN(32), YELLOW(33), BLUE(34), MAGENTA(35), CYAN(36) and WHITE(37)."
     codes = {
@@ -114,12 +135,32 @@ def colorized(text: str, *, color: str | int, bold: bool = False):
             print(msg)
             return
         text = f"\033[{bold_code}{color}m{text}\033[0m"
-
     else:
         color = color.lower()
         if color not in codes:
             print(msg)
             return
         text = f"\033[{bold_code}{codes[color]}m{text}\033[0m"
+
+    return text
+
+
+def timetext(second: int | float):
+    """
+    Convert seconds to actual time text.
+    """
+    text = f"{second:.2f}s"
+    m = h = 0
+
+    if second >= 60:
+        m = int(second / 60)
+        second = second % 60
+        text = f"{m}{'m'if m else ''}{second:.2f}s"
+
+    if m >= 60:
+        h = int(second / 3600)
+        m = int(second % 3600 / 60)
+        second = second % 3600 % 60
+        text = f"{h}{'h'if m else''}{m}{'m'if m else ''}{second:.2f}s"
 
     return text

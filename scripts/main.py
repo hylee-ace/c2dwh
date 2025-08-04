@@ -1,8 +1,8 @@
-from bs4 import BeautifulSoup
-from web_crawler.utils import Crawler
-from urllib.parse import urlparse, urljoin
-import os, time
+from web_crawler.crawler import Crawler
+from web_crawler.utils import Cursor, runtime, colorized
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading, requests
+from lxml import html
 
 
 def main():
@@ -37,44 +37,55 @@ def main():
         |   queue.difference_update(history)
         |   |
     queue{} --> i.results{} --> crawled{1,2,3,4,5,8,9,6} (stop)
+
+    while queue:
+        temp = set()
+
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            futures = [ex.submit(crawler, i) for i in queue]
+
+            for i in as_completed(futures):
+                temp.update(i.result())
+                crawled.update(queue, temp)
+
+        history.update(queue)
+        queue = temp.difference(queue)
+        queue.difference_update(history)
     
     """
 
-    # def crawler(url):
-    #     tool = Crawler(urljoin(domain, url), headless=True)
-    #     print("Inspecting " + url)
-    #     return tool.inspect(
-    #         "a",
-    #         attr="href",
-    #         href=lambda x: x
-    #         and urlparse(urljoin(domain, x)).hostname == urlparse(domain).hostname
-    #         and "add-to-cart" not in urljoin(domain, x)
-    #         and "shop" in urljoin(domain, x)
-    #         and "#" not in urljoin(domain, x),
-    #     )
+    @runtime
+    def crawl():
+        crawler = Crawler()
+        crawler.queue.add(domain)
+        lock = threading.Lock()
 
-    # queue = {domain}
-    # crawled = set()
-    # history = set()
+        while crawler.queue:
+            temp = set()
 
-    # while queue:
-    #     temp = set()
+            with ThreadPoolExecutor(max_workers=30) as ex:
+                futures = [ex.submit(Crawler.explore, i) for i in crawler.queue]
 
-    #     with ThreadPoolExecutor(max_workers=5) as ex:
-    #         futures = [ex.submit(crawler, i) for i in queue]
+                for i in as_completed(futures):
+                    try:
+                        with lock:  # prevent race condition
+                            crawler.crawled.update(crawler.queue, i.result())
+                            temp.update(i.result())
+                    except Exception as e:
+                        print(f"[{colorized('x',31,bold=True)}] Error >> {e}")
+                        print(i.cancelled(),i.done())
+                        continue
 
-    #         for i in as_completed(futures):
-    #             temp.update(i.result())
-    #             crawled.update(queue, temp)
+            crawler.history.update(crawler.queue)
+            crawler.queue = temp.difference(crawler.queue)
+            crawler.queue.difference_update(crawler.history)
 
-    #     history.update(queue)
-    #     queue = temp.difference(queue)
-    #     queue.difference_update(history)
+        print(
+            f"Exploring completed. Found {colorized(str(len(crawler.crawled))+' urls',32)}.",
+            Cursor.clear,
+        )
 
-    #     print(len(crawled), len(history), len(queue))
-
-    t = Crawler.inspect(domain, "a")
-    print(len(t))
+    crawl()
 
 
 if __name__ == "__main__":

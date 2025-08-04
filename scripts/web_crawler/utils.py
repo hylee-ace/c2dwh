@@ -1,5 +1,4 @@
 from selenium.webdriver import Firefox, FirefoxOptions
-from bs4 import BeautifulSoup
 import threading, time, functools
 
 
@@ -11,7 +10,7 @@ class CustomDriver(Firefox):
 
     def __init__(self):
         # service = FirefoxService()
-        # service.path = "./geckodriver"
+        # service.path = "./.geckodriver"
         option = FirefoxOptions()
 
         option.add_argument("--headless")
@@ -22,41 +21,25 @@ class CustomDriver(Firefox):
         super().__init__(options=option)
 
 
-class Crawler:
-    crawled = set()
-    queue = set()
-    history = set()
+class Cursor:
+    """
+    Terminal cursor behaviors.
+    """
 
-    def __init__(self, base_url: str):
-        self.__url = base_url
-
-    @staticmethod
-    def inspect(
-        url: str, tag: str, *, attr: str = None, filter_attrs: dict = {}, **kwargs
-    ):
-        data = []
-
-        with CustomDriver() as driver:
-            driver.get(url)
-            soup = BeautifulSoup(driver.page_source, "html.parser")
-
-        tags = soup.find_all(tag, filter_attrs, **kwargs)
-
-        for i in tags:
-            data.append(i.get(attr).strip() if attr else i)
-
-        return data
+    clear = "\033[K"
+    hide = "\033[?25l"
+    reveal = "\033[?25h"
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-def runtime(obj: object):
+def runtime(func: object):
     """
     Decorator for estimating runtime of a process.
     """
 
-    @functools.wraps(obj)
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         res = None
         error = False
@@ -64,57 +47,58 @@ def runtime(obj: object):
 
         def stopwatch():
             global start
-            start = time.time()
+            start = time.perf_counter()
             while not event.is_set():
-                global now
-                now = time.time() - start
                 print(
-                    f"\rRuntime: {colorized(timetext(now),color=33)}",
-                    "\033[?25l",
+                    f"\rRuntime: {colorized(timetext(time.perf_counter()-start),33)}",
+                    Cursor.hide,
                     end="\r",
                     flush=True,
                 )
-                time.sleep(0.1)
+                time.sleep(0.095)
 
-        def get_obj_value():
+        def get_value():
             nonlocal res, error
             try:
-                res = obj(*args, **kwargs)
+                res = func(*args, **kwargs)
             except Exception as e:
                 error = True
                 print(
-                    f"[{colorized('x',color=31,bold=True)}] Error occurs in {colorized(obj.__qualname__,color=31)} >> {e}"
+                    f"[{colorized('x',31,bold=True)}] Error occurs in {colorized(func.__qualname__,31)} >> {e}"
                 )
             finally:
                 event.set()
 
         sw_thread = threading.Thread(target=stopwatch)
-        obj_thread = threading.Thread(target=get_obj_value)
+        fn_thread = threading.Thread(target=get_value)
 
-        obj_thread.start(), sw_thread.start()
-        sw_thread.join(), obj_thread.join()
+        fn_thread.start(), sw_thread.start()
+        fn_thread.join()
 
         if not error:
-            print(f"Finished in {colorized(timetext(now),color=32)}\033[?25h")
+            print(
+                f"Finished in {colorized(timetext(time.perf_counter()-start),32)}",
+                Cursor.reveal,
+            )
 
         return res
 
     return wrapper
 
 
-def colorized(text: str | int | float, *, color: str | int, bold: bool = False):
+def colorized(text: str | int | float, color: str | int, *, bold: bool = False):
     """
-    Change printed text color in terminal.
+    Customized text color in terminal.
 
     ---
-        _**BLACK**_: 30
-        _**RED**_: 31
-        _**GREEN**_: 32
-        _**YELLOW**_: 33
-        _**BLUE**_: 34
-        _**MAGENTA**_: 35
-        _**CYAN**_: 36
-        _**WHITE**_: 37
+        BLACK: 30
+        RED: 31
+        GREEN: 32
+        YELLOW: 33
+        BLUE: 34
+        MAGENTA: 35
+        CYAN: 36
+        WHITE: 37
     """
 
     msg = "Only support BLACK(30), RED(31), GREEN(32), YELLOW(33), BLUE(34), MAGENTA(35), CYAN(36) and WHITE(37)."
@@ -128,19 +112,18 @@ def colorized(text: str | int | float, *, color: str | int, bold: bool = False):
         "cyan": 36,
         "white": 37,
     }
-    bold_code = "01;" if bold else ""
 
     if isinstance(color, int):
         if color not in codes.values():
             print(msg)
             return
-        text = f"\033[{bold_code}{color}m{text}\033[0m"
+        text = f"\033[0{'1'if bold else '0'};{color}m{text}\033[0m"
     else:
         color = color.lower()
         if color not in codes:
             print(msg)
             return
-        text = f"\033[{bold_code}{codes[color]}m{text}\033[0m"
+        text = f"\033[0{'1'if bold else '0'}{codes[color]}m{text}\033[0m"
 
     return text
 
@@ -149,18 +132,11 @@ def timetext(second: int | float):
     """
     Convert seconds to actual time text.
     """
-    text = f"{second:.2f}s"
-    m = h = 0
 
-    if second >= 60:
-        m = int(second / 60)
-        second = second % 60
-        text = f"{m}{'m'if m else ''}{second:.2f}s"
+    h = int(second / 3600)
+    m = int(second % 3600 / 60)
+    s = second % 3600 % 60
 
-    if m >= 60:
-        h = int(second / 3600)
-        m = int(second % 3600 / 60)
-        second = second % 3600 % 60
-        text = f"{h}{'h'if m else''}{m}{'m'if m else ''}{second:.2f}s"
+    text = f"{h if h>0 else ''}{'h'if h>0 else ''}{'0' if h>0 and m<10 else ''}{m if m>0 else ''}{'m'if m>0 else ''}{s:.2f}s"
 
     return text

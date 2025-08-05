@@ -45,6 +45,7 @@ def runtime(func: object):
         error = False
         event = threading.Event()
 
+        # concurrent works
         def stopwatch():
             global start
             start = time.perf_counter()
@@ -69,6 +70,7 @@ def runtime(func: object):
             finally:
                 event.set()
 
+        # initialize threads
         sw_thread = threading.Thread(target=stopwatch)
         fn_thread = threading.Thread(target=get_value)
 
@@ -86,9 +88,9 @@ def runtime(func: object):
     return wrapper
 
 
-def colorized(text: str | int | float, color: str | int, *, bold: bool = False):
+def colorized(chars: str | int | float, color: str | int, *, bold: bool = False):
     """
-    Customized text color in terminal.
+    Customized characters color in terminal.
 
     ---
         BLACK: 30
@@ -117,15 +119,15 @@ def colorized(text: str | int | float, color: str | int, *, bold: bool = False):
         if color not in codes.values():
             print(msg)
             return
-        text = f"\033[0{'1'if bold else '0'};{color}m{text}\033[0m"
+        chars = f"\033[0{'1'if bold else '0'};{color}m{chars}\033[0m"
     else:
         color = color.lower()
         if color not in codes:
             print(msg)
             return
-        text = f"\033[0{'1'if bold else '0'}{codes[color]}m{text}\033[0m"
+        chars = f"\033[0{'1'if bold else '0'}{codes[color]}m{chars}\033[0m"
 
-    return text
+    return chars
 
 
 def timetext(second: int | float):

@@ -1,24 +1,49 @@
-from .utils import CustomDriver, colorized
-from urllib.parse import urlparse, urljoin
+from utils.utils import CustomWebDriver
 from bs4 import BeautifulSoup
 from lxml import html
 from requests.exceptions import HTTPError, Timeout, ConnectionError
 from selenium.common.exceptions import WebDriverException, TimeoutException
+from urllib.parse import urljoin
 import requests, time
 
 
-class Crawler:
-    crawled = set()
+class WebScout:
     queue = set()
-    history = set()
+    crawled = set()
+    in_use = None
 
-    # def __init__(self, base_url: str):
-    #     self.__baseurl = base_url
-    #     Crawler
+    def __init__(self, url: str):
+        WebScout.in_use = url
+        if url not in WebScout.queue:
+            WebScout.queue.add(url)
+            
+        else:
+            WebScout.queue.remove(url)
 
-    # @classmethod
-    # def crawl(cls, url: str):
-    #     pass
+    @staticmethod
+    def crawl(save_in: list):
+        res = [
+            urljoin(WebScout.in_use, i)
+            for i in WebScout.inspect(
+                WebScout.in_use,
+                helper="lxml",
+                xpath="//a[contains(@href,'shop')and not(contains(@href,'add-to-cart'))and not(contains(@href,'#'))]/@href",
+            )
+        ]
+
+        # update crawled urls
+        WebScout.crawled.update(res)
+        WebScout.crawled.add(WebScout.in_use)
+
+        # update queue
+        WebScout.queue.update(res)
+
+        # update output
+        save_in.extend(WebScout.crawled)
+
+        # update using url
+        print(WebScout.in_use, "explored.")
+        WebScout.in_use = None
 
     @staticmethod
     def inspect(
@@ -86,7 +111,7 @@ class Crawler:
 
             if helper == "selenium":
                 try:
-                    driver = CustomDriver()
+                    driver = CustomWebDriver()
                     driver.set_page_load_timeout(15)
                     driver.get(url)
                 except WebDriverException as e:  # connection lost
@@ -98,7 +123,7 @@ class Crawler:
                     print(f"{e}. Retrying...")
                     while turns > 0:
                         try:
-                            driver = CustomDriver()
+                            driver = CustomWebDriver()
                             driver.set_page_load_timeout(15)
                             driver.get(url)
                             break

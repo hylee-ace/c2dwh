@@ -2,7 +2,7 @@ from selenium.webdriver import Firefox, FirefoxOptions
 import threading, time, functools
 
 
-class CustomDriver(Firefox):
+class CustomWebDriver(Firefox):
     """
     Customized webdriver for Firefox browser. In latest Selenium, service is no longer necessary,
     if facing any problems with GeckoDriver, uncomment service setup.

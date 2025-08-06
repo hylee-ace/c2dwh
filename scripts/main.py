@@ -1,58 +1,39 @@
-from web_crawler.utils import runtime, colorized, Cursor, CustomDriver
-from web_crawler.crawler import Crawler
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urlparse, urljoin
+from webexplorer import WebScout
+from utils import runtime
+from urllib.parse import urljoin
 import threading
 
 
-@runtime
-def crawl(url: str):
-    crawler = Crawler()
-    crawler.queue.add(url)
-    lock = threading.Lock()
-
-    while crawler.queue:
-        temp = set()
-
-        with ThreadPoolExecutor(max_workers=10) as ex:
-            futures = [
-                ex.submit(
-                    Crawler.inspect,
-                    i,
-                    helper="bs4",
-                    tag="a",
-                    attr="href",
-                    href=lambda x: x
-                    and urlparse(urljoin(url, i)).hostname == urlparse(url).hostname
-                    and urlparse(urljoin(url, i)).path.endswith("html")
-                    and len(x) > 1
-                    and x != "",
-                )
-                for i in crawler.queue
-            ]
-
-            for i in as_completed(futures):
-                link = urlparse(urljoin(url, i.result()))
-                try:
-                    with lock:  # prevent race condition
-                        crawler.crawled.update(crawler.queue, link)
-                        temp.update(link)
-                except Exception as e:
-                    print(f"[{colorized('x',31,bold=True)}] Error >> {e}")
-                    continue
-
-        crawler.history.update(crawler.queue)
-        crawler.queue = temp.difference(crawler.queue)
-        crawler.queue.difference_update(crawler.history)
-
-    print(
-        f"Exploring completed. Found {colorized(str(len(crawler.crawled))+' urls',32)}.",
-        Cursor.clear,
-    )
-
-
 def main():
-    domain = "https://cellphones.com.vn/"
+    base = "https://scrapeme.live/shop/"
+    done = list()
+    # lock = threading.Lock()
+
+    WebScout(base)
+
+    # @runtime
+    def work():
+        nonlocal done
+        while WebScout.queue:
+            todolist = sorted(WebScout.queue)
+            threads = [threading.Thread()]
+            chunk = 20 if len(todolist) > 20 else len(todolist)
+
+            for i in range(chunk):
+                scout = WebScout(todolist[i])
+                if not WebScout.in_use:
+                    continue
+                t = threading.Thread(target=scout.crawl, args=(done,))
+                threads.append(t)
+
+            for i in threads:
+                i.start()
+                i.join()
+
+            print(f"Queue: {len(scout.queue)} | Found: {len(done)}")
+
+    work()
+    print(done)
 
 
 if __name__ == "__main__":

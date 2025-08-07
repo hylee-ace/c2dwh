@@ -1,1 +1,1 @@
-from .scout import WebScout
+from .crawler import Crawler

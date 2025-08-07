@@ -1,5 +1,5 @@
 from selenium.webdriver import Firefox, FirefoxOptions
-import threading, time, functools
+import threading, time, functools, httpx, asyncio
 
 
 class CustomWebDriver(Firefox):
@@ -16,7 +16,7 @@ class CustomWebDriver(Firefox):
         option.add_argument("--headless")
         option.set_preference(
             "general.useragent.override",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
         )
         super().__init__(options=option)
 
@@ -142,3 +142,21 @@ def timetext(second: int | float):
     text = f"{h if h>0 else ''}{'h'if h>0 else ''}{'0' if h>0 and m<10 else ''}{m if m>0 else ''}{'m'if m>0 else ''}{s:.2f}s"
 
     return text
+
+
+def async_get(url, *, client: httpx.Client, retries: int = 3):
+    """
+    Performs GET request. Return successful response object or None if all retries fail.
+    """
+
+    for _ in range(retries):
+        try:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return resp
+        except httpx.HTTPStatusError as e:
+            print(e)
+            return None
+        except httpx.RequestError as e:
+            print(f"{e}. Retrying...")
+            time.sleep(2)

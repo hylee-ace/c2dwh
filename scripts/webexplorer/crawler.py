@@ -1,55 +1,56 @@
-from utils.utils import CustomWebDriver
+from utils.utils import CustomWebDriver, async_get
 from bs4 import BeautifulSoup
 from lxml import html
-from requests.exceptions import HTTPError, Timeout, ConnectionError
 from selenium.common.exceptions import WebDriverException, TimeoutException
 from urllib.parse import urljoin
-import requests, time
+import time, threading, httpx, asyncio
 
 
-class WebScout:
+class Crawler:
+    """ """
+
+    base_url = None
     queue = set()
     crawled = set()
-    in_use = None
 
-    def __init__(self, url: str):
-        WebScout.in_use = url
-        if url not in WebScout.queue:
-            WebScout.queue.add(url)
-            
-        else:
-            WebScout.queue.remove(url)
+    def __init__(self, base_url: str, crawled: set):
+        if not Crawler.base_url:
+            Crawler.base_url = base_url
+            Crawler.queue.add(base_url)
+
+        Crawler.crawled.update(crawled)
 
     @staticmethod
-    def crawl(save_in: list):
+    def crawl(
+        url: str, *, lock: threading.Lock, output: set = None, client: httpx.Client
+    ):
+        # start inspecting
         res = [
-            urljoin(WebScout.in_use, i)
-            for i in WebScout.inspect(
-                WebScout.in_use,
+            urljoin(url, i.strip())
+            for i in Crawler.inspect(
+                url,
                 helper="lxml",
                 xpath="//a[contains(@href,'shop')and not(contains(@href,'add-to-cart'))and not(contains(@href,'#'))]/@href",
+                client=client,
             )
-        ]
+        ]  # founded urls
 
-        # update crawled urls
-        WebScout.crawled.update(res)
-        WebScout.crawled.add(WebScout.in_use)
-
-        # update queue
-        WebScout.queue.update(res)
-
-        # update output
-        save_in.extend(WebScout.crawled)
-
-        # update using url
-        print(WebScout.in_use, "explored.")
-        WebScout.in_use = None
+        # update queue and crawled
+        with lock:
+            Crawler.queue.remove(url)  # remove inspected url
+            Crawler.queue.update(
+                i for i in res if i not in Crawler.crawled
+            )  # put new urls in queue for inspecting
+            Crawler.crawled.add(url)  # put inspected url to crawled list
+            Crawler.crawled.update(res)  # also update founded urls to crawled list
+            output.update(Crawler.crawled)  # update (for writing to file)
 
     @staticmethod
     def inspect(
         url: str,
         *,
         helper: str,
+        client: httpx.Client,
         xpath: str = None,
         tag: str = None,
         attr: str = None,
@@ -136,25 +137,7 @@ class WebScout:
                         time.sleep(5)
 
             else:
-                try:
-                    resp = requests.get(url, timeout=10)
-                    resp.raise_for_status()
-                except (HTTPError, ConnectionError) as e:
-                    final_e = e
-                    return
-                except Timeout as e:  # retry
-                    print(f"{e}. Retrying...")
-                    while turns > 0:
-                        try:
-                            resp = requests.get(url, timeout=10)
-                            resp.raise_for_status()
-                            break
-                        except Exception as e:
-                            print(f"{e}. Retrying...")
-                            final_e = e
-                            resp = None  # reset resp if fail again
-                        turns -= 1
-                        time.sleep(5)
+                pass
 
         # main work
         if helper == "selenium":  # dynamic content
@@ -190,13 +173,11 @@ class WebScout:
                 driver.quit()
                 return data
         elif helper == "lxml":  # static content
-            retry_load()
+            # retry_load()
+            resp = async_get(url, client=client)
 
-            if not resp or resp.status_code != 200:
-                if turns == 3:  # connection lost case
-                    print(final_e, "(Make sure the connection remains stable)")
-                    return
-                print("Failed 3 times.", {final_e})
+            if not resp:
+                print(f"Can not inspect {url}. {resp}")
                 return
 
             page = html.fromstring(resp.content)
@@ -206,13 +187,11 @@ class WebScout:
 
             return html.tostring(page, pretty_print=True, encoding="unicode")
         else:  # static content
-            retry_load()
+            # retry_load()
+            resp = async_get(url, client=client)
 
-            if not resp or resp.status_code != 200:
-                if turns == 3:  # connection lost case
-                    print(final_e, "(Make sure the connection remains stable)")
-                    return
-                print("Failed 3 times.", {final_e})
+            if not resp:
+                print(f"Can not inspect {url}. {resp}")
                 return
 
             soup = BeautifulSoup(resp.content, "html.parser")

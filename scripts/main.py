@@ -1,39 +1,51 @@
-from webexplorer import WebScout
-from utils import runtime
-from urllib.parse import urljoin
-import threading
+from webexplorer import Crawler
+from utils import runtime, Cursor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading, httpx, asyncio
+from lxml import html
 
 
+@runtime
 def main():
-    base = "https://scrapeme.live/shop/"
-    done = list()
-    # lock = threading.Lock()
+    main_page = "https://scrapeme.live/shop/"
+    crawled = set()
+    lock = threading.Lock()
 
-    WebScout(base)
+    # initial step
+    Crawler(main_page, crawled)
 
-    # @runtime
-    def work():
-        nonlocal done
-        while WebScout.queue:
-            todolist = sorted(WebScout.queue)
-            threads = [threading.Thread()]
-            chunk = 20 if len(todolist) > 20 else len(todolist)
+    # start the work
+    with httpx.Client(
+        timeout=20.0,
+        follow_redirects=True,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
+            "Connection": "keep-alive",
+        },
+    ) as client:
+        while Crawler.queue:
+            # limit thread workers
+            workers = list(Crawler.queue)[:100]
 
-            for i in range(chunk):
-                scout = WebScout(todolist[i])
-                if not WebScout.in_use:
-                    continue
-                t = threading.Thread(target=scout.crawl, args=(done,))
-                threads.append(t)
+            with ThreadPoolExecutor(max_workers=100) as ex:
+                futures = [
+                    ex.submit(
+                        Crawler.crawl,
+                        url=i,
+                        lock=lock,
+                        output=crawled,
+                        client=client,
+                    )
+                    for i in workers
+                ]
 
-            for i in threads:
-                i.start()
-                i.join()
+                for _ in as_completed(futures):
+                    print(
+                        f"Checklist remains {len(Crawler.queue)} | Passed {len(Crawler.crawled)}"
+                    )
 
-            print(f"Queue: {len(scout.queue)} | Found: {len(done)}")
-
-    work()
-    print(done)
+    print(f"Found {len(crawled)} urls.", Cursor.clear)
+    print(Cursor.reveal)
 
 
 if __name__ == "__main__":

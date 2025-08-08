@@ -256,3 +256,80 @@ def main():
     print(f"Found {len(crawled)} urls.", Cursor.clear)
     print(Cursor.reveal)
 
+============================================
+
+import asyncio
+import httpx
+from concurrent.futures import ThreadPoolExecutor
+from lxml import html
+
+# SETTINGS
+CONCURRENCY_LIMIT = 20
+PARSER_THREADS = 10
+URLS = ["https://example.com/page1", "https://example.com/page2", ...]  # your URLs
+
+# QUEUE
+response_queue = asyncio.Queue()
+
+
+# ----------------------
+# ASYNC FETCHER (Producer)
+# ----------------------
+async def fetch_url(url, client, semaphore):
+    async with semaphore:
+        try:
+            resp = await client.get(url, timeout=10)
+            resp.raise_for_status()
+            await response_queue.put((url, resp.text))
+        except Exception as e:
+            print(f"[x] Failed to fetch {url} >> {e}")
+
+
+async def producer(urls):
+    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_url(url, client, semaphore) for url in urls]
+        await asyncio.gather(*tasks)
+
+    # Signal consumers that fetching is done
+    for _ in range(PARSER_THREADS):
+        await response_queue.put(None)
+
+
+# ----------------------
+# THREADED PARSER (Consumer)
+# ----------------------
+def parse_html(url, raw_html):
+    try:
+        tree = html.fromstring(raw_html)
+        title = tree.xpath("//title/text()")[0] if tree.xpath("//title/text()") else "No title"
+        print(f"[✓] Parsed {url} -> {title}")
+        return (url, title)
+    except Exception as e:
+        print(f"[x] Parse error for {url} >> {e}")
+        return (url, None)
+
+
+async def consumer(executor):
+    while True:
+        item = await response_queue.get()
+        if item is None:
+            break  # signal to end
+
+        url, raw_html = item
+        await asyncio.to_thread(parse_html, url, raw_html)
+
+
+# ----------------------
+# MAIN ENTRY
+# ----------------------
+async def main():
+    executor = ThreadPoolExecutor(max_workers=PARSER_THREADS)
+    consumers = [consumer(executor) for _ in range(PARSER_THREADS)]
+
+    await asyncio.gather(
+        producer(URLS),
+        *consumers,
+    )
+
+asyncio.run(main())

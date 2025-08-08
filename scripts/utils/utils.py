@@ -1,5 +1,5 @@
 from selenium.webdriver import Firefox, FirefoxOptions
-import threading, time, functools, httpx, asyncio
+import threading, time, functools, httpx, asyncio, inspect
 
 
 class CustomWebDriver(Firefox):
@@ -38,14 +38,15 @@ def runtime(func: object):
     """
     Decorator for estimating runtime of a process.
     """
+    is_async = inspect.iscoroutinefunction(func)
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def sync_wrapper(*args, **kwargs):
         res = None
         error = False
         event = threading.Event()
 
-        # concurrent works
+        # background work
         def stopwatch():
             global start
             start = time.perf_counter()
@@ -85,7 +86,52 @@ def runtime(func: object):
 
         return res
 
-    return wrapper
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        res = None
+        error = False
+        event = threading.Event()
+
+        # background work
+        def stopwatch():
+            global start
+            start = time.perf_counter()
+            while not event.is_set():
+                print(
+                    f"\rRuntime: {colorized(timetext(time.perf_counter()-start),33)}",
+                    Cursor.hide,
+                    end="\r",
+                    flush=True,
+                )
+                time.sleep(0.095)
+
+        async def get_value():
+            nonlocal res, error
+            try:
+                res = await func(*args, **kwargs)
+            except Exception as e:
+                error = True
+                print(
+                    f"[{colorized('x',31,bold=True)}] Error occurs in {colorized(func.__qualname__,31)} >> {e}"
+                )
+            finally:
+                event.set()
+
+        # initialize thread
+        sw_thread = threading.Thread(target=stopwatch)
+        sw_thread.start()
+
+        await get_value()
+
+        if not error:
+            print(
+                f"Finished in {colorized(timetext(time.perf_counter()-start),32)}",
+                Cursor.reveal,
+            )
+
+        return res
+
+    return async_wrapper if is_async else sync_wrapper
 
 
 def colorized(chars: str | int | float, color: str | int, *, bold: bool = False):
@@ -144,14 +190,35 @@ def timetext(second: int | float):
     return text
 
 
-def async_get(url, *, client: httpx.Client, retries: int = 3):
+async def async_get(
+    url,
+    *,
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore = None,
+    retries: int = 3,
+    delay: int | float = 2.0,
+):
     """
-    Performs GET request. Return successful response object or None if all retries fail.
+    Perform asynchronous GET request. Return response object or None if all retries fail.
     """
+    if semaphore:
+        async with semaphore:  # limit number of concurrent processes
+            for _ in range(retries):
+                try:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                    return resp
+                except httpx.HTTPStatusError as e:
+                    print(e)
+                    return None
+                except httpx.RequestError as e:
+                    print(f"{e}. Retrying...")
+                    await asyncio.sleep(delay)
+            return None
 
     for _ in range(retries):
         try:
-            resp = client.get(url)
+            resp = await client.get(url)
             resp.raise_for_status()
             return resp
         except httpx.HTTPStatusError as e:
@@ -159,4 +226,5 @@ def async_get(url, *, client: httpx.Client, retries: int = 3):
             return None
         except httpx.RequestError as e:
             print(f"{e}. Retrying...")
-            time.sleep(2)
+            await asyncio.sleep(delay)
+    return None

@@ -5,11 +5,13 @@ import asyncio
 
 @runtime
 def main():
-    main_page = "https://cellphones.com.vn/"
+    main_page = "https://books.toscrape.com/"
+    save_path = "./scripts/webcrawler/crawled/bookstoscrape.txt"
 
     crawler = Crawler(
         main_page,
         search="//a[contains(@href,'.html')]/@href",
+        save_in=save_path,
     )
 
     headers = {
@@ -31,8 +33,8 @@ def main():
         )
     )
 
-    print(crawler.crawled)
-    print(len(crawler.crawled))
+    print(crawler.valid)
+    print(f"Crawled: {len(crawler.crawled)} | Scrapable: {len(crawler.valid)}")
 
     crawler.reset()
 

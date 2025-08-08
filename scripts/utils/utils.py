@@ -1,24 +1,4 @@
-from selenium.webdriver import Firefox, FirefoxOptions
-import threading, time, functools, httpx, asyncio, inspect
-
-
-class CustomWebDriver(Firefox):
-    """
-    Customized webdriver for Firefox browser. In latest Selenium, service is no longer necessary,
-    if facing any problems with GeckoDriver, uncomment service setup.
-    """
-
-    def __init__(self):
-        # service = FirefoxService()
-        # service.path = "./.geckodriver"
-        option = FirefoxOptions()
-
-        option.add_argument("--headless")
-        option.set_preference(
-            "general.useragent.override",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
-        )
-        super().__init__(options=option)
+import threading, time, functools, httpx, asyncio, inspect, os
 
 
 class Cursor:
@@ -228,3 +208,24 @@ async def async_get(
             print(f"{e}. Retrying...")
             await asyncio.sleep(delay)
     return None
+
+
+def save_to_file(data: list[str] | str, path: str):
+    """
+    Save data to given path.
+    """
+
+    if path and path != "":
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    else:
+        print("Invalid path.")
+        return
+
+    mode = "a" if os.path.exists(path) else "w"
+
+    try:
+        with open(path, mode) as file:
+            file.writelines(data)
+    except Exception as e:
+        print(f"Saving to {path} failed. {e}")
+        return

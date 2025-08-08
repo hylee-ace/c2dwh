@@ -1,18 +1,23 @@
-from utils import async_get
+from utils import async_get, save_to_file
 from lxml import html
 from urllib.parse import urljoin
-import asyncio, httpx
+import asyncio, httpx, os
 
 
 class Crawler:
+    """
+    Explore more URLs from given one basing on Xpath search expression and Asynchronous mechanism.
+    """
+
     base_url = None
     search = None
-    save_in = set()
+    save_path = None
     queue = set()
     crawled = set()
-    lock = asyncio.Lock()
+    valid = set()
+    __lock = asyncio.Lock()
 
-    def __init__(self, base_url: str, *, search: str, save_in: set = None):
+    def __init__(self, base_url: str, *, search: str, save_in: str = None):
         if not Crawler.base_url:
             Crawler.base_url = base_url
             Crawler.queue.add(base_url)
@@ -20,52 +25,8 @@ class Crawler:
         if not Crawler.search:
             Crawler.search = search
 
-        Crawler.save_in = save_in
-
-    @staticmethod
-    async def inspect(
-        url,
-        *,
-        client: httpx.AsyncClient,
-        xpath: str = None,
-        semaphore: asyncio.Semaphore = asyncio.Semaphore(10),
-    ):
-        resp = await async_get(url, client=client, semaphore=semaphore)
-
-        if not resp:
-            print(f"Inspecting {url} failed.")
-            return
-
-        source = html.fromstring(resp.content)
-
-        if xpath:
-            return source.xpath(xpath)
-
-        return html.tostring(source, pretty_print=True, encoding="unicode")
-
-    async def __crawl(
-        url: str,
-        client: httpx.AsyncClient,
-        semaphore: asyncio.Semaphore,
-    ):
-        found = await Crawler.inspect(
-            url, client=client, xpath=Crawler.search, semaphore=semaphore
-        )
-
-        if not found:  # url broken
-            Crawler.queue.remove(url)
-            return
-
-        result = [urljoin(Crawler.base_url, i) for i in found]
-
-        # update results
-        async with Crawler.lock:
-            Crawler.queue.remove(url)  # remove inspected url
-            Crawler.queue.update(
-                i for i in result if i not in Crawler.crawled
-            )  # put new urls in queue for inspecting
-            Crawler.crawled.add(url)  # put inspected url to crawled
-            Crawler.crawled.update(result)  # also put founded urls to
+        if save_in != "":
+            Crawler.save_path = save_in
 
     @classmethod
     async def execute(
@@ -77,6 +38,10 @@ class Crawler:
         chunksize: int = 100,
         semaphore: asyncio.Semaphore = asyncio.Semaphore(10),
     ):
+        """
+        Start crawling process from given base URL.
+        """
+
         if not headers:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
@@ -97,15 +62,77 @@ class Crawler:
                 await asyncio.gather(*tasks)
 
             print(
-                f"Checklist remains {len(cls.queue)} | Found: {len(cls.crawled)} urls"
+                f"Checklist remains {len(cls.queue)} | Crawled: {len(cls.crawled)} | Valid: {len(cls.valid)}"
             )
+
+    @staticmethod
+    async def async_inspect(
+        url,
+        *,
+        client: httpx.AsyncClient,
+        xpath: str = None,
+        semaphore: asyncio.Semaphore = asyncio.Semaphore(10),
+    ):
+        """
+        Asynchronously inspect HTML content from given URL.
+        """
+
+        resp = await async_get(url, client=client, semaphore=semaphore)
+
+        if not resp:
+            print(f"Inspecting {url} failed.")
+            return
+
+        source = html.fromstring(resp.content)
+
+        if xpath:
+            return source.xpath(xpath)
+
+        return html.tostring(source, pretty_print=True, encoding="unicode")
 
     @classmethod
     def reset(cls):
-        if cls.save_in:
-            cls.save_in.clear()
+        """
+        Reset crawler after use.
+        """
+
+        if cls.save_path:
+            cls.save_path = None
 
         cls.base_url = None
         cls.search = None
         cls.queue.clear()
         cls.crawled.clear()
+
+    # main work
+    async def __crawl(
+        url: str,
+        client: httpx.AsyncClient,
+        semaphore: asyncio.Semaphore,
+    ):
+        found = await Crawler.async_inspect(
+            url, client=client, xpath=Crawler.search, semaphore=semaphore
+        )
+
+        if not found:  # url broken
+            Crawler.queue.remove(url)
+            return
+
+        result = [urljoin(Crawler.base_url, i) for i in found]
+
+        # update results
+        async with Crawler.__lock:
+            Crawler.queue.remove(url)  # remove inspected url
+            Crawler.queue.update(
+                i for i in result if i not in Crawler.crawled
+            )  # put new urls in queue for inspecting
+            Crawler.crawled.add(url)  # put inspected url to crawled for history check
+            Crawler.crawled.update(result)  # also put founded urls to crawled
+            Crawler.valid.add(url)  # update scrapable urls
+
+            if Crawler.save_path:
+                save_to_file(url + "\n", Crawler.save_path)
+
+    # in case run crawl again, check crawled urls in file
+    def __check_file():
+        pass

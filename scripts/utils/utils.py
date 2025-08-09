@@ -215,7 +215,10 @@ def save_to_file(data: list[str] | str, path: str):
     Save data to given path.
     """
 
-    if path and path != "":
+    if path:
+        if os.path.isdir(path):
+            print(f"Invalid path. {path} is a directory.")
+            return
         os.makedirs(os.path.dirname(path), exist_ok=True)
     else:
         print("Invalid path.")
@@ -225,7 +228,10 @@ def save_to_file(data: list[str] | str, path: str):
 
     try:
         with open(path, mode) as file:
-            file.writelines(data)
+            if isinstance(data, str):
+                file.write(data)
+            else:
+                file.writelines(data)
     except Exception as e:
         print(f"Saving to {path} failed >> {e}")
         return

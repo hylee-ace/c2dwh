@@ -1,6 +1,6 @@
 from webcrawler import Crawler
-from utils import runtime
-import asyncio
+from utils import runtime, colorized
+import asyncio, os
 
 
 @runtime
@@ -14,27 +14,25 @@ def main():
         save_in=save_path,
     )
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
-        "Connection": "keep-alive",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
-        "Referer": "https://www.google.com/",
-        "DNT": "1",  # not track request header
-        "Upgrade-Insecure-Requests": "1",
-    }
-
     asyncio.run(
         crawler.execute(
-            headers=headers,
             timeout=20,
             chunksize=500,
             semaphore=asyncio.Semaphore(50),
         )
     )
 
-    print(crawler.valid)
-    print(f"Crawled: {len(crawler.crawled)} | Scrapable: {len(crawler.valid)}")
+    if crawler.history:
+        new = len(crawler.valid - crawler.history)
+        text = (
+            f"({new} more url{'s'if new>1 else ''})"
+            if new > 0
+            else "(There are no new urls)"
+        )
+
+    print(
+        f"Crawled: {colorized(len(crawler.crawled),33)} | Valid: {colorized(len(crawler.valid),32)} {text if crawler.history else ''}"
+    )
 
     crawler.reset()
 

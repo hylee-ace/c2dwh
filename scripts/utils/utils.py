@@ -227,5 +227,5 @@ def save_to_file(data: list[str] | str, path: str):
         with open(path, mode) as file:
             file.writelines(data)
     except Exception as e:
-        print(f"Saving to {path} failed. {e}")
+        print(f"Saving to {path} failed >> {e}")
         return

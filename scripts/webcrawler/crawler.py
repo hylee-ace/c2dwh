@@ -1,4 +1,4 @@
-from utils import async_get, save_to_file
+from utils import async_get, save_to_file, colorized
 from lxml import html
 from urllib.parse import urljoin
 import asyncio, httpx, os
@@ -6,7 +6,16 @@ import asyncio, httpx, os
 
 class Crawler:
     """
-    Explore more URLs from given one basing on Xpath search expression and Asynchronous mechanism.
+    Asynchronous URL crawler that discovers and processes links based on an XPath search expression.
+
+    Attributes
+    ----------
+    base_url: str
+        The starting URL for the crawling process.
+    search: str
+        XPath expression used to locate target links in HTML pages.
+    save_in: str
+        Path to save output data.
     """
 
     base_url = None
@@ -26,9 +35,63 @@ class Crawler:
         if not Crawler.search:
             Crawler.search = search
 
-        if save_in and save_in != "":
+        if save_in:
             Crawler.save_path = save_in
-            Crawler.__check_history()
+            Crawler.__history_check()
+
+    @staticmethod
+    async def async_inspect(
+        url,
+        *,
+        client: httpx.AsyncClient,
+        xpath: str = None,
+        semaphore: asyncio.Semaphore = None,
+    ):
+        """
+        Asynchronously inspect HTML content from given URL.
+        """
+
+        resp = await async_get(url, client=client, semaphore=semaphore)
+
+        if not resp:
+            print(f"Inspecting {url} failed.")
+            return
+
+        source = html.fromstring(resp.content)
+
+        if xpath:
+            return source.xpath(xpath)
+
+        return html.tostring(source, pretty_print=True, encoding="unicode")
+
+    async def __crawl(
+        url: str,
+        client: httpx.AsyncClient,
+        semaphore: asyncio.Semaphore = None,
+    ):
+        found = await Crawler.async_inspect(
+            url, client=client, xpath=Crawler.search, semaphore=semaphore
+        )
+
+        if not found:  # url broken
+            async with Crawler.__lock:
+                Crawler.queue.remove(url)
+            return
+
+        result = [str(urljoin(Crawler.base_url, i)).strip() for i in found]
+
+        # update results
+        async with Crawler.__lock:
+            Crawler.queue.remove(url)  # remove inspected url
+            Crawler.queue.update(
+                i for i in result if i not in Crawler.crawled
+            )  # put new urls into queue for inspecting
+            Crawler.crawled.add(url)  # put inspected url into crawled for history check
+            Crawler.crawled.update(result)  # also put founded urls into crawled
+            Crawler.valid.add(url)  # put only scrapable urls into valid
+
+            if Crawler.save_path and url not in Crawler.history:
+                save_to_file(url + "\n", Crawler.save_path)  # only save valid urls
 
     @classmethod
     async def execute(
@@ -42,6 +105,19 @@ class Crawler:
     ):
         """
         Start crawling process from given base URL.
+
+        Parameters
+        ---
+        timeout: int, float, optional
+            Request timeout in seconds (default: **10.0**).
+        follow_redirects: bool, optional
+            Whether to follow HTTP redirects (default: **True**).
+        headers: httpx.Header, optional
+            Custom HTTP request headers (default: **None**).
+        chunksize: int, optional
+            Number of URLs to process per batch, best range in **200-1000** (default: **100**).
+        semaphore: asyncio.Semaphore, optional
+            Concurrency limit for simultaneous requests, best range in **20-150** (default: **10**).
         """
 
         if not headers:
@@ -70,33 +146,35 @@ class Crawler:
                 await asyncio.gather(*tasks)
 
                 print(
-                    f"Checklist remains {len(cls.queue)} | Crawled: {len(cls.crawled)} | Valid: {len(cls.valid)}"
+                    f"Pending {len(cls.queue)} | Crawled: {len(cls.crawled)} | Valid: {len(cls.valid)}"
                 )
 
-    @staticmethod
-    async def async_inspect(
-        url,
-        *,
-        client: httpx.AsyncClient,
-        xpath: str = None,
-        semaphore: asyncio.Semaphore = asyncio.Semaphore(10),
-    ):
-        """
-        Asynchronously inspect HTML content from given URL.
-        """
+        if cls.history:
+            new = len(cls.valid - cls.history)
+            text = (
+                f"(Found {new} more {'urls'if new>1 else 'url'})"
+                if new > 0
+                else "(No more urls found.)"
+            )
 
-        resp = await async_get(url, client=client, semaphore=semaphore)
+        print(
+            f"Crawled: {colorized(len(cls.crawled),33)} | Valid: {colorized(len(cls.valid),32)} {text if cls.history else ''}"
+        )
 
-        if not resp:
-            print(f"Inspecting {url} failed.")
+    def __history_check():
+        if not os.path.isfile(Crawler.save_path):
             return
 
-        source = html.fromstring(resp.content)
+        print("Previous work detected. Continuing...")
 
-        if xpath:
-            return source.xpath(xpath)
-
-        return html.tostring(source, pretty_print=True, encoding="unicode")
+        try:
+            with open(Crawler.save_path, "r") as file:
+                for i in file:
+                    Crawler.history.add(str(i).removesuffix("\n"))
+                    Crawler.valid.add(str(i).removesuffix("\n"))
+            print("History updated.")
+        except Exception as e:
+            print(f"Error occurs while opening file >> {e}")
 
     @classmethod
     def reset(cls):
@@ -113,47 +191,4 @@ class Crawler:
         cls.crawled.clear()
         cls.history.clear()
 
-    # main work
-    async def __crawl(
-        url: str,
-        client: httpx.AsyncClient,
-        semaphore: asyncio.Semaphore,
-    ):
-        found = await Crawler.async_inspect(
-            url, client=client, xpath=Crawler.search, semaphore=semaphore
-        )
-
-        if not found:  # url broken
-            Crawler.queue.remove(url)
-            return
-
-        result = [urljoin(Crawler.base_url, i) for i in found]
-
-        # update results
-        async with Crawler.__lock:
-            Crawler.queue.remove(url)  # remove inspected url
-            Crawler.queue.update(
-                i for i in result if i not in Crawler.crawled
-            )  # put new urls into queue for inspecting
-            Crawler.crawled.add(url)  # put inspected url into crawled for history check
-            Crawler.crawled.update(result)  # also put founded urls into crawled
-            Crawler.valid.add(url)  # put only scrapable urls into valid
-
-            if Crawler.save_path and url not in Crawler.history:
-                save_to_file(url + "\n", Crawler.save_path)  # only save valid urls
-
-    # in case run crawl again, check if crawled urls were in file
-    def __check_history():
-        if not os.path.isfile(Crawler.save_path):
-            return
-
-        print("Previous work detected. Continuing...")
-
-        try:
-            with open(Crawler.save_path, "r") as file:
-                for i in file:
-                    Crawler.history.add(str(i).removesuffix("\n"))
-                    Crawler.valid.add(str(i).removesuffix("\n"))
-            print("History updated.")
-        except Exception as e:
-            print(f"Error occurs while opening file >> {e}")
+        print("Crawler reset.")

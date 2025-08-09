@@ -1,16 +1,16 @@
 from webcrawler import Crawler
-from utils import runtime, colorized
-import asyncio, os
+from utils import runtime
+import asyncio
 
 
 @runtime
 def main():
-    main_page = "https://books.toscrape.com/"
-    save_path = "./scripts/webcrawler/crawled/bookstoscrape.txt"
+    main_page = "https://quotes.toscrape.com/"
+    save_path = "./scripts/webcrawler/crawled/quotestoscrape.txt"
 
     crawler = Crawler(
         main_page,
-        search="//a[contains(@href,'.html')]/@href",
+        search="//a[not (contains(@href,'login'))and not (contains(@href,'zyte'))and not (contains(@href,'goodreads'))]/@href",
         save_in=save_path,
     )
 
@@ -18,23 +18,12 @@ def main():
         crawler.execute(
             timeout=20,
             chunksize=500,
-            semaphore=asyncio.Semaphore(50),
+            semaphore=asyncio.Semaphore(150),
         )
-    )
-
-    if crawler.history:
-        new = len(crawler.valid - crawler.history)
-        text = (
-            f"({new} more url{'s'if new>1 else ''})"
-            if new > 0
-            else "(There are no new urls)"
-        )
-
-    print(
-        f"Crawled: {colorized(len(crawler.crawled),33)} | Valid: {colorized(len(crawler.valid),32)} {text if crawler.history else ''}"
     )
 
     crawler.reset()
+
 
 
 if __name__ == "__main__":

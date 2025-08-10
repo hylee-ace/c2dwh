@@ -1,6 +1,7 @@
 from utils import async_get, save_to_file, colorized
 from lxml import html
 from urllib.parse import urljoin
+from datetime import datetime
 import asyncio, httpx, os
 
 
@@ -91,7 +92,9 @@ class Crawler:
             Crawler.valid.add(url)  # put only scrapable urls into valid
 
             if Crawler.save_path and url not in Crawler.history:
-                save_to_file(url + "\n", Crawler.save_path)  # only save valid urls
+                save_to_file(
+                    f"{url}, {datetime.now()}" + "\n", Crawler.save_path
+                )  # only save new valid urls
 
     @classmethod
     async def execute(
@@ -115,21 +118,27 @@ class Crawler:
         headers: httpx.Header, optional
             Custom HTTP request headers (default: **None**).
         chunksize: int, optional
-            Number of URLs to process per batch, best range in **200-1000** (default: **100**).
+            Number of URLs to process per batch, best range in **100-2000** (default: **100**).
         semaphore: asyncio.Semaphore, optional
-            Concurrency limit for simultaneous requests, best range in **20-150** (default: **10**).
+            Concurrency limit for simultaneous requests, best range in **10-200** (default: **10**).
         """
 
+        default_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
+            "Connection": "keep-alive",
+            "Accept-Language": "vi, en, en-US;q=0.9, en-GB;q=0.9",
+            "Cache-Control": "no-cache",
+            "Referer": "https://www.google.com/",
+            "DNT": "1",  # not track request header
+            "Upgrade-Insecure-Requests": "1",
+        }
+
         if not headers:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
-                "Connection": "keep-alive",
-                "Accept-Language": "vi, en, en-US;q=0.9, en-GB;q=0.9",
-                "Cache-Control": "no-cache",
-                "Referer": "https://www.google.com/",
-                "DNT": "1",  # not track request header
-                "Upgrade-Insecure-Requests": "1",
-            }
+            headers = default_headers
+        else:
+            copy = default_headers.copy()
+            copy.update(headers)
+            headers = copy
 
         async with httpx.AsyncClient(
             timeout=timeout,
@@ -154,7 +163,7 @@ class Crawler:
             text = (
                 f"(Found {new} more {'urls'if new>1 else 'url'})"
                 if new > 0
-                else "(No more urls found.)"
+                else "(No more urls found)"
             )
 
         print(

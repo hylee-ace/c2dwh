@@ -46,6 +46,7 @@ class Crawler:
         *,
         client: httpx.AsyncClient,
         xpath: str = None,
+        encoding: str = "utf-8",
         semaphore: asyncio.Semaphore = None,
     ):
         """
@@ -58,7 +59,7 @@ class Crawler:
             print(f"Inspecting {url} failed.")
             return
 
-        source = html.fromstring(resp.content)
+        source = html.fromstring(resp.content.decode(encoding))
 
         if xpath:
             return source.xpath(xpath)

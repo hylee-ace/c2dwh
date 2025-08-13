@@ -192,7 +192,7 @@ async def async_get(
                     print(e)
                     return None
                 except httpx.RequestError as e:
-                    print(f"{e}. Retrying...")
+                    print(f"{e}. Retrying...", Cursor.clear)
                     await asyncio.sleep(delay)
             return None
 
@@ -205,7 +205,7 @@ async def async_get(
             print(e)
             return None
         except httpx.RequestError as e:
-            print(f"{e}. Retrying...")
+            print(f"{e}. Retrying...", Cursor.clear)
             await asyncio.sleep(delay)
     return None
 

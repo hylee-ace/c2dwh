@@ -180,8 +180,9 @@ class Crawler:
         try:
             with open(Crawler.save_path, "r") as file:
                 for i in file:
-                    Crawler.history.add(str(i).removesuffix("\n"))
-                    Crawler.valid.add(str(i).removesuffix("\n"))
+                    url = str(i).split(",")[0]
+                    Crawler.history.add(url)
+                    Crawler.valid.add(url)
             print("History updated.")
         except Exception as e:
             print(f"Error occurs while opening file >> {e}")

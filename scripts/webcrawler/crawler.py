@@ -107,13 +107,12 @@ class Crawler:
             if url not in Crawler.history:
                 Crawler.crawled.add(url)  # put inspected url into crawled
                 Crawler.valid.add(url)  # put only scrapable urls into valid
+                if Crawler.save_path:
+                    Crawler.__save_result(
+                        f"{url}, {datetime.now()}\n"
+                    )  # only save new valid urls
 
             Crawler.crawled.update(result)  # also put founded urls into crawled
-
-            if Crawler.save_path and url not in Crawler.history:
-                Crawler.__save_result(
-                    f"{url}, {datetime.now()}\n"
-                )  # only save new valid urls
 
     @classmethod
     async def execute(
@@ -122,7 +121,6 @@ class Crawler:
         timeout: int | float = 10.0,
         follow_redirects: bool = True,
         headers: httpx.Headers = None,
-        cookies: httpx.Cookies = None,
         chunksize: int = 100,
         semaphore: asyncio.Semaphore = asyncio.Semaphore(10),
     ):
@@ -151,7 +149,6 @@ class Crawler:
                 "image/avif,image/webp,*/*;q=0.8"
             ),
             "Accept-Language": "vi,en-US;q=0.9,en;q=0.8,en-GB;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
             "Cache-Control": "no-cache",
             "Referer": "https://www.google.com/",
             "DNT": "1",  # not track request header
@@ -174,7 +171,6 @@ class Crawler:
             timeout=timeout,
             follow_redirects=follow_redirects,
             headers=headers,
-            cookies=cookies,
         ) as client:
             while cls.queue:
                 in_use = list(cls.queue)[:chunksize]

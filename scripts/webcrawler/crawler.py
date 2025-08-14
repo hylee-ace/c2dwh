@@ -1,8 +1,8 @@
-from utils import async_get, save_to_file, colorized
+from utils import colorized, Cursor
 from lxml import html
 from urllib.parse import urljoin
 from datetime import datetime
-import asyncio, httpx, os
+import asyncio, httpx, os, random
 
 
 class Crawler:
@@ -46,20 +46,35 @@ class Crawler:
         *,
         client: httpx.AsyncClient,
         xpath: str = None,
-        encoding: str = "utf-8",
         semaphore: asyncio.Semaphore = None,
+        retries: int = 3,
+        delay: float = 2.0,
     ):
         """
         Asynchronously inspect HTML content from given URL.
         """
+        last_exception = None
+        resp = None
 
-        resp = await async_get(url, client=client, semaphore=semaphore)
+        async with semaphore:  # limit number of concurrent processes
+            for _ in range(retries):
+                try:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                    break
+                except httpx.HTTPStatusError as e:
+                    print(f"Inspecting {url} failed >> {e}")
+                    return
+                except httpx.RequestError as e:
+                    print(f"{e}. Retrying...", Cursor.clear)
+                    last_exception = e
+                    await asyncio.sleep(delay)
 
-        if not resp:
-            print(f"Inspecting {url} failed.")
+        if not resp:  # in case failed 3 times
+            print(f"Inspecting {url} failed 3 times >> {last_exception}")
             return
 
-        source = html.fromstring(resp.content.decode(encoding))
+        source = html.fromstring(resp.content)
 
         if xpath:
             return source.xpath(xpath)
@@ -88,13 +103,16 @@ class Crawler:
             Crawler.queue.update(
                 i for i in result if i not in Crawler.crawled
             )  # put new urls into queue for inspecting
-            Crawler.crawled.add(url)  # put inspected url into crawled for history check
+
+            if url not in Crawler.history:
+                Crawler.crawled.add(url)  # put inspected url into crawled
+                Crawler.valid.add(url)  # put only scrapable urls into valid
+
             Crawler.crawled.update(result)  # also put founded urls into crawled
-            Crawler.valid.add(url)  # put only scrapable urls into valid
 
             if Crawler.save_path and url not in Crawler.history:
-                save_to_file(
-                    f"{url}, {datetime.now()}" + "\n", Crawler.save_path
+                Crawler.__save_result(
+                    f"{url}, {datetime.now()}\n"
                 )  # only save new valid urls
 
     @classmethod
@@ -104,6 +122,7 @@ class Crawler:
         timeout: int | float = 10.0,
         follow_redirects: bool = True,
         headers: httpx.Headers = None,
+        cookies: httpx.Cookies = None,
         chunksize: int = 100,
         semaphore: asyncio.Semaphore = asyncio.Semaphore(10),
     ):
@@ -125,13 +144,23 @@ class Crawler:
         """
 
         default_headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
             "Connection": "keep-alive",
-            "Accept-Language": "vi, en, en-US;q=0.9, en-GB;q=0.9",
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,*/*;q=0.8"
+            ),
+            "Accept-Language": "vi,en-US;q=0.9,en;q=0.8,en-GB;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
             "Cache-Control": "no-cache",
             "Referer": "https://www.google.com/",
             "DNT": "1",  # not track request header
             "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-User": "?1",
+            "Pragma": "no-cache",
         }
 
         if not headers:
@@ -145,6 +174,7 @@ class Crawler:
             timeout=timeout,
             follow_redirects=follow_redirects,
             headers=headers,
+            cookies=cookies,
         ) as client:
             while cls.queue:
                 in_use = list(cls.queue)[:chunksize]
@@ -183,9 +213,30 @@ class Crawler:
                     url = str(i).split(",")[0]
                     Crawler.history.add(url)
                     Crawler.valid.add(url)
+                    Crawler.queue.add(url)
+                    Crawler.crawled.add(url)
             print("History updated.")
         except Exception as e:
             print(f"Error occurs while opening file >> {e}")
+
+    def __save_result(url: str):
+        if Crawler.save_path:
+            if os.path.isdir(Crawler.save_path):
+                print(f"Invalid path. {Crawler.save_path} is a directory.")
+                return
+            os.makedirs(os.path.dirname(Crawler.save_path), exist_ok=True)
+        else:
+            print("Invalid path.")
+            return
+
+        mode = "a" if os.path.exists(Crawler.save_path) else "w"
+
+        try:
+            with open(Crawler.save_path, mode) as file:
+                file.write(url)
+        except Exception as e:
+            print(f"Saving to {Crawler.save_path} failed >> {e}")
+            return
 
     @classmethod
     def reset(cls):

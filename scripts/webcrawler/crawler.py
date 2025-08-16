@@ -2,7 +2,7 @@ from utils import colorized, Cursor
 from lxml import html
 from urllib.parse import urljoin
 from datetime import datetime
-import asyncio, httpx, os, random
+import asyncio, httpx, os
 
 
 class Crawler:

@@ -1,6 +1,6 @@
-from webcrawler import Crawler
-from utils import runtime
 import asyncio, multiprocessing
+from webcrawler import Crawler, nuxt_to_data
+from utils import runtime
 
 
 def crawling_work(
@@ -55,8 +55,8 @@ def crawling_process():
             "xpath": f"//a[substring(@href,string-length(@href)-4)='.html'and not({exclude_text})"
             "and contains(@href,'cellphones.com.vn')]/@href",
             "save_path": "./scripts/webcrawler/crawled/cellphones.csv",
-            "chunksize": 500,
-            "sema": 200,
+            "chunksize": 20,
+            "sema": 10,
         },
         {
             "site": "https://www.thegioididong.com/",
@@ -89,8 +89,13 @@ def crawling_process():
         i.join()
 
 
+@runtime
 def main():
-    crawling_process()
+    # crawling_process()
+    url = "https://cellphones.com.vn/laptop-acer-gaming-predator-helios-neo-phn16-72-78l4.html"
+
+    data = asyncio.run(nuxt_to_data(url, encoding="utf-8"))
+    print(data.keys())
 
 
 if __name__ == "__main__":

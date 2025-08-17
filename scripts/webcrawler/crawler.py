@@ -1,8 +1,9 @@
+import asyncio, httpx, os, json
 from utils import colorized, Cursor
 from lxml import html
 from urllib.parse import urljoin
 from datetime import datetime
-import asyncio, httpx, os
+from py_mini_racer.py_mini_racer import MiniRacer
 
 
 class Crawler:
@@ -44,9 +45,10 @@ class Crawler:
     async def async_inspect(
         url,
         *,
-        client: httpx.AsyncClient,
+        client: httpx.AsyncClient = None,
         xpath: str = None,
         semaphore: asyncio.Semaphore = None,
+        encoding: str = None,
         retries: int = 3,
         delay: float = 2.0,
     ):
@@ -56,7 +58,13 @@ class Crawler:
         last_exception = None
         resp = None
 
-        async with semaphore:  # limit number of concurrent processes
+        if not semaphore:  # limit number of concurrent processes
+            semaphore = asyncio.Semaphore(5)
+
+        async def get_response(
+            client: httpx.AsyncClient = None,
+        ):  # handle retries
+            nonlocal resp, last_exception
             for _ in range(retries):
                 try:
                     resp = await client.get(url)
@@ -65,16 +73,31 @@ class Crawler:
                 except httpx.HTTPStatusError as e:
                     print(f"Inspecting {url} failed >> {e}")
                     return
-                except httpx.RequestError as e:
+                except Exception as e:
                     print(f"{e}. Retrying...", Cursor.clear)
                     last_exception = e
                     await asyncio.sleep(delay)
+
+        async with semaphore:
+            if client:  # global client
+                await get_response(client)
+            else:
+                async with httpx.AsyncClient(
+                    timeout=10.0,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
+                        "Connection": "keep-alive",
+                    },
+                ) as client:
+                    await get_response(client)
 
         if not resp:  # in case failed 3 times
             print(f"Inspecting {url} failed 3 times >> {last_exception}")
             return
 
-        source = html.fromstring(resp.content)
+        source = html.fromstring(
+            resp.content if not encoding else resp.content.decode(encoding)
+        )
 
         if xpath:
             return source.xpath(xpath)
@@ -86,6 +109,9 @@ class Crawler:
         client: httpx.AsyncClient,
         semaphore: asyncio.Semaphore = None,
     ):
+        if not semaphore:
+            semaphore = asyncio.Semaphore(5)
+
         found = await Crawler.async_inspect(
             url, client=client, xpath=Crawler.search, semaphore=semaphore
         )
@@ -121,8 +147,8 @@ class Crawler:
         timeout: int | float = 10.0,
         follow_redirects: bool = True,
         headers: httpx.Headers = None,
-        chunksize: int = 100,
-        semaphore: asyncio.Semaphore = asyncio.Semaphore(10),
+        chunksize: int = 20,
+        semaphore: asyncio.Semaphore = None,
     ):
         """
         Start crawling process from given base URL.
@@ -136,9 +162,9 @@ class Crawler:
         headers: httpx.Header, optional
             Custom HTTP request headers (default: **None**).
         chunksize: int, optional
-            Number of URLs to process per batch, best range in **100-2000** (default: **100**).
+            Number of URLs to process per batch. Be cautious, high request rate could lead to IP banned (default: **20**).
         semaphore: asyncio.Semaphore, optional
-            Concurrency limit for simultaneous requests, best range in **10-200** (default: **10**).
+            Concurrency limit for simultaneous requests, best range in **5-20**.
         """
 
         default_headers = {
@@ -166,6 +192,9 @@ class Crawler:
             copy = default_headers.copy()
             copy.update(headers)
             headers = copy
+
+        if not semaphore:
+            semaphore = asyncio.Semaphore(5)
 
         async with httpx.AsyncClient(
             timeout=timeout,
@@ -250,3 +279,33 @@ class Crawler:
         cls.history.clear()
 
         print("Crawler reset.")
+
+
+# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
+
+
+async def nuxt_to_data(
+    url: str, *, client: httpx.AsyncClient = None, encoding: str = None
+):
+    """
+    Extract data from Nuxt.js-based HTML by JS runner.
+    """
+
+    nuxt = await Crawler.async_inspect(
+        url,
+        client=client,
+        xpath="//script[not(@*) and contains(.,'window.__NUXT__')]/text()",
+        encoding=encoding,
+    )
+
+    if not nuxt:
+        return
+
+    # prepare JS runner
+    js_runner = MiniRacer()
+    js_runner.eval("var window = {};")
+    js_runner.eval(nuxt[0])
+    data = js_runner.eval("JSON.stringify(window.__NUXT__)")
+
+    # load to json
+    return json.loads(data)

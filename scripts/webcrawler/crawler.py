@@ -1,5 +1,5 @@
 import asyncio, httpx, os, json
-from utils import colorized, Cursor
+from utils import colorized
 from lxml import html
 from urllib.parse import urljoin
 from datetime import datetime
@@ -73,8 +73,8 @@ class Crawler:
                 except httpx.HTTPStatusError as e:
                     print(f"Inspecting {url} failed >> {e}")
                     return
-                except Exception as e:
-                    print(f"{e}. Retrying...", Cursor.clear)
+                except (httpx.RequestError, httpx.TimeoutException) as e:
+                    print(f"{repr(e)}. Retrying...")
                     last_exception = e
                     await asyncio.sleep(delay)
 
@@ -135,7 +135,7 @@ class Crawler:
                 Crawler.valid.add(url)  # put only scrapable urls into valid
                 if Crawler.save_path:
                     Crawler.__save_result(
-                        f"{url}, {datetime.now()}\n"
+                        f"{url}, {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n"
                     )  # only save new valid urls
 
             Crawler.crawled.update(result)  # also put founded urls into crawled
@@ -149,6 +149,7 @@ class Crawler:
         headers: httpx.Headers = None,
         chunksize: int = 20,
         semaphore: asyncio.Semaphore = None,
+        delay: float = None,
     ):
         """
         Start crawling process from given base URL.
@@ -165,6 +166,8 @@ class Crawler:
             Number of URLs to process per batch. Be cautious, high request rate could lead to IP banned (default: **20**).
         semaphore: asyncio.Semaphore, optional
             Concurrency limit for simultaneous requests, best range in **5-20**.
+        delay: float, optional
+            Delay between chunks (default: **2.0**).
         """
 
         default_headers = {
@@ -210,8 +213,15 @@ class Crawler:
 
                 await asyncio.gather(*tasks)
 
+                if delay:
+                    await asyncio.sleep(delay)  # delay between chunks
+
                 print(
-                    f"Pending {len(cls.queue)} | Crawled: {len(cls.crawled)} | Valid: {len(cls.valid)}"
+                    f"Site: {cls.base_url}",
+                    f"Pending {len(cls.queue)}",
+                    f"Crawled: {len(cls.crawled)}",
+                    f"Valid: {len(cls.valid)}",
+                    sep=" | ",
                 )
 
         if cls.history:
@@ -223,14 +233,17 @@ class Crawler:
             )
 
         print(
-            f"Crawled: {colorized(len(cls.crawled),33)} | Valid: {colorized(len(cls.valid),32)} {text if cls.history else ''}"
+            f"Site: {colorized( cls.base_url,34)}",
+            f"Crawled: {colorized(len(cls.crawled),33)}",
+            f"Valid: {colorized(len(cls.valid),32)} {text if cls.history else ''}",
+            sep=" | ",
         )
 
     def __history_check():
         if not os.path.isfile(Crawler.save_path):
             return
 
-        print("Previous work detected. Continuing...")
+        print(f"Previous work with {Crawler.base_url} detected. Continuing...")
 
         try:
             with open(Crawler.save_path, "r") as file:

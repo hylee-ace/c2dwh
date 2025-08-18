@@ -1,10 +1,17 @@
-import asyncio, multiprocessing
-from webcrawler import Crawler, nuxt_to_data
+import asyncio, multiprocessing, random, time, json
+from webcrawler import Crawler, nuxt_to_data, Phone
+from datetime import datetime, timezone
 from utils import runtime
 
 
 def crawling_work(
-    site: str, xpath: str, save_path: str, chunksize: int, sema: int, headers=None
+    site: str,
+    xpath: str,
+    save_path: str,
+    chunksize: int,
+    sema: int,
+    delay: float = None,
+    headers=None,
 ):
     crawler = Crawler(site, search=xpath, save_in=save_path)
 
@@ -14,14 +21,13 @@ def crawling_work(
             chunksize=chunksize,
             semaphore=asyncio.Semaphore(sema),
             headers=headers,
+            delay=delay,
         )
     )
 
     crawler.reset()
-    print(f"Crawling {site} done.")
 
 
-@runtime
 def crawling_process():
     excludes = [
         "dmca",
@@ -55,22 +61,24 @@ def crawling_process():
             "xpath": f"//a[substring(@href,string-length(@href)-4)='.html'and not({exclude_text})"
             "and contains(@href,'cellphones.com.vn')]/@href",
             "save_path": "./scripts/webcrawler/crawled/cellphones.csv",
-            "chunksize": 20,
-            "sema": 10,
+            "chunksize": 50,
+            "sema": 50,
         },
         {
             "site": "https://www.thegioididong.com/",
             "xpath": "//a[substring(@href,1,7)='/laptop'or substring(@href,1,5)='/dtdd']/@href",
             "save_path": "./scripts/webcrawler/crawled/tgdd.csv",
-            "chunksize": 20,
-            "sema": 5,
+            "chunksize": 10,
+            "sema": 10,
+            "delay": random.uniform(0.5, 1.0),
         },
         {
             "site": "https://fptshop.com.vn/",
             "xpath": "//a[substring(@href,1,11)='/dien-thoai'or substring(@href,1,18)='/may-tinh-xach-tay']/@href",
             "save_path": "./scripts/webcrawler/crawled/fptshop.csv",
-            "chunksize": 20,
-            "sema": 5,
+            "chunksize": 10,
+            "sema": 10,
+            "delay": random.uniform(0.5, 1.0),
             "headers": {
                 "Cookie": "cf_clearance=srIGkxKx9eUfh_IyuI9WnAahQMhYLxDLV_OrZLt7tNE-1755178655-1.2.1.1-Xc5TgHVNQYiWT_quM0"
                 "rusLbLGFqPgDzYIhkeiR3VcG86GLE.sHvo1W4e1ZleC20ShAdI1I5qpImkx5akP58br_TUez_ssiNKP1VkI7RD6R5LF3TFy6xhM2UqbcW"
@@ -84,18 +92,39 @@ def crawling_process():
         p = multiprocessing.Process(target=crawling_work, kwargs=i)
         p.start()
         processes.append(p)
+        time.sleep(2)  # delay between processes
 
     for i in processes:
         i.join()
 
 
+def scrape(url: str):
+    data = asyncio.run(nuxt_to_data(url, encoding="utf-8"))
+    products = []
+
+    # check if url were product page
+    if "product-detail:0" not in data["fetch"]:
+        return
+
+    for i in data["fetch"]["product-detail:0"]["variants"]:
+        print(i['general'])
+
+
 @runtime
 def main():
     # crawling_process()
-    url = "https://cellphones.com.vn/laptop-acer-gaming-predator-helios-neo-phn16-72-78l4.html"
 
-    data = asyncio.run(nuxt_to_data(url, encoding="utf-8"))
-    print(data.keys())
+    urls = [
+        "https://cellphones.com.vn/iphone-16-pro-max.html",  # phone
+        "https://cellphones.com.vn/laptop-acer-aspire-lite-15-al15-41p-r3u5.html",  # latop
+        "https://cellphones.com.vn/nokia-hmd-105-4g.html",  # phone no discount
+        "https://cellphones.com.vn/laptop-acer-nitro-v-16-propanel-anv16-41-r36y.html",  # upcoming latop
+        "https://cellphones.com.vn/apple-macbook-air-13-m4-10cpu-8gpu-16gb-256gb-2025.html",  # mac
+        "https://cellphones.com.vn/laptop-dell-latitude-e7470.html",  # laptop no price
+        "https://cellphones.com.vn/laptop.html",  # not product page
+    ]
+
+    scrape(urls[0])
 
 
 if __name__ == "__main__":

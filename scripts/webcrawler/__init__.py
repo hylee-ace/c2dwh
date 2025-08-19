@@ -1,2 +1,2 @@
-from .crawler import Crawler, nuxt_to_data
-from .models import Phone
+from .crawler import Crawler
+from .scraper import CpsScraper

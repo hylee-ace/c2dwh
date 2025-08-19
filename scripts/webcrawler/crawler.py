@@ -1,9 +1,8 @@
-import asyncio, httpx, os, json
+import asyncio, httpx, os
 from utils import colorized
 from lxml import html
 from urllib.parse import urljoin
 from datetime import datetime
-from py_mini_racer.py_mini_racer import MiniRacer
 
 
 class Crawler:
@@ -107,11 +106,8 @@ class Crawler:
     async def __crawl(
         url: str,
         client: httpx.AsyncClient,
-        semaphore: asyncio.Semaphore = None,
+        semaphore: asyncio.Semaphore,
     ):
-        if not semaphore:
-            semaphore = asyncio.Semaphore(5)
-
         found = await Crawler.async_inspect(
             url, client=client, xpath=Crawler.search, semaphore=semaphore
         )
@@ -217,7 +213,7 @@ class Crawler:
                     await asyncio.sleep(delay)  # delay between chunks
 
                 print(
-                    f"Site: {cls.base_url}",
+                    f"From: {cls.base_url}",
                     f"Pending {len(cls.queue)}",
                     f"Crawled: {len(cls.crawled)}",
                     f"Valid: {len(cls.valid)}",
@@ -232,8 +228,9 @@ class Crawler:
                 else "(No more urls found)"
             )
 
+        print("Crawling successfully.")
         print(
-            f"Site: {colorized( cls.base_url,34)}",
+            f"From: {colorized( cls.base_url,34)}",
             f"Crawled: {colorized(len(cls.crawled),33)}",
             f"Valid: {colorized(len(cls.valid),32)} {text if cls.history else ''}",
             sep=" | ",
@@ -292,33 +289,3 @@ class Crawler:
         cls.history.clear()
 
         print("Crawler reset.")
-
-
-# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
-
-
-async def nuxt_to_data(
-    url: str, *, client: httpx.AsyncClient = None, encoding: str = None
-):
-    """
-    Extract data from Nuxt.js-based HTML by JS runner.
-    """
-
-    nuxt = await Crawler.async_inspect(
-        url,
-        client=client,
-        xpath="//script[not(@*) and contains(.,'window.__NUXT__')]/text()",
-        encoding=encoding,
-    )
-
-    if not nuxt:
-        return
-
-    # prepare JS runner
-    js_runner = MiniRacer()
-    js_runner.eval("var window = {};")
-    js_runner.eval(nuxt[0])
-    data = js_runner.eval("JSON.stringify(window.__NUXT__)")
-
-    # load to json
-    return json.loads(data)

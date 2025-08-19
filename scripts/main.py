@@ -1,6 +1,5 @@
 import asyncio, multiprocessing, random, time, json
-from webcrawler import Crawler, nuxt_to_data, Phone
-from datetime import datetime, timezone
+from webcrawler import Crawler, CpsScraper
 from utils import runtime
 
 
@@ -98,22 +97,10 @@ def crawling_process():
         i.join()
 
 
-def scrape(url: str):
-    data = asyncio.run(nuxt_to_data(url, encoding="utf-8"))
-    products = []
-
-    # check if url were product page
-    if "product-detail:0" not in data["fetch"]:
-        return
-
-    for i in data["fetch"]["product-detail:0"]["variants"]:
-        print(i['general'])
+# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-@runtime
-def main():
-    # crawling_process()
-
+def scraping_work():
     urls = [
         "https://cellphones.com.vn/iphone-16-pro-max.html",  # phone
         "https://cellphones.com.vn/laptop-acer-aspire-lite-15-al15-41p-r3u5.html",  # latop
@@ -121,10 +108,24 @@ def main():
         "https://cellphones.com.vn/laptop-acer-nitro-v-16-propanel-anv16-41-r36y.html",  # upcoming latop
         "https://cellphones.com.vn/apple-macbook-air-13-m4-10cpu-8gpu-16gb-256gb-2025.html",  # mac
         "https://cellphones.com.vn/laptop-dell-latitude-e7470.html",  # laptop no price
-        "https://cellphones.com.vn/laptop.html",  # not product page
+        "https://cellphones.com.vn/dien-thoai-masstel-izi-16-4g.html",  # unknown genre
+        "https://cellphones.com.vn/nubia-neo-2.html",  # unknown genre
+        "https://cellphones.com.vn/laptop-hp-omnibook-x-14-fe1010qu-b53kbpa-copilot-x-plus.html",
+        "https://cellphones.com.vn/laptop-lenovo-thinkpad-e16-gen-1-21jn006gvn.html",
     ]
+    scraper = CpsScraper(urls)
 
-    scrape(urls[0])
+    asyncio.run(scraper.execute())
+    for i in scraper.result:
+        print(json.dumps(i, indent=2, ensure_ascii=False))
+        print("-----------")
+    scraper.reset()
+
+
+@runtime
+def main():
+    # crawling_process()
+    scraping_work()
 
 
 if __name__ == "__main__":

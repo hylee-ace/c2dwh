@@ -1,7 +1,7 @@
 import httpx, json, asyncio
 from .crawler import Crawler
 from .models import Phone, Laptop
-from utils import colorized
+from utils import colorized, dict_to_csv
 from py_mini_racer.py_mini_racer import MiniRacer
 from datetime import datetime
 
@@ -11,6 +11,7 @@ class CpsScraper:
     save_path = None
     result = list()
     __queue = set()
+    __scraped = set()
     __lock = asyncio.Lock()
 
     def __init__(self, urls: list[str], *, save_in: str = None):
@@ -37,9 +38,7 @@ class CpsScraper:
             encoding=encoding,
         )
 
-        if not nuxt:  # url might be broken
-            async with CpsScraper.__lock:
-                CpsScraper.__queue.remove(url)
+        if not nuxt:
             return
 
         # prepare JS runner
@@ -61,11 +60,11 @@ class CpsScraper:
         )
         islaptop = False
 
-        if not data:
-            return
-
         # check if url were product page
-        if "product-detail:0" not in data["fetch"]:
+        if not data or "product-detail:0" not in data["fetch"]:
+            async with CpsScraper.__lock:
+                CpsScraper.__scraped.add(url)
+                CpsScraper.__queue.discard(url)
             return
 
         # check device type
@@ -119,6 +118,16 @@ class CpsScraper:
             product.brand = data["fetch"]["product-detail:0"]["headProduct"]["script"][
                 1
             ]["json"]["brand"]["name"]
+            product.is_new = (
+                False
+                if "cũ"
+                in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                    "json"
+                ]["name"]
+                .lower()
+                .split(" ")
+                else True
+            )
             product.created_at = datetime.fromisoformat(
                 data["data"][0]["pageInfo"]["created_at"]
             ).strftime("%Y-%m-%d %H:%M:%S")
@@ -154,8 +163,12 @@ class CpsScraper:
 
             # update result
             async with CpsScraper.__lock:
-                CpsScraper.__queue.remove(url)
+                CpsScraper.__scraped.add(url)
+                CpsScraper.__queue.discard(url)
                 CpsScraper.result.append(laptop.info())
+                if CpsScraper.save_path:
+                    dict_to_csv(laptop.info(), CpsScraper.save_path)
+
         else:
             phone = Phone(
                 data["data"][0]["pageInfo"]["product_id"],
@@ -184,8 +197,11 @@ class CpsScraper:
 
             # update result
             async with CpsScraper.__lock:
-                CpsScraper.__queue.remove(url)
+                CpsScraper.__scraped.add(url)
+                CpsScraper.__queue.discard(url)
                 CpsScraper.result.append(phone.info())
+                if CpsScraper.save_path:
+                    dict_to_csv(phone.info(), CpsScraper.save_path)
 
     @classmethod
     async def execute(
@@ -266,16 +282,21 @@ class CpsScraper:
                 print(
                     f"From: {cls.__retailer}",
                     f"Pending {len(cls.__queue)}",
-                    f"Scraped: {len(cls.result)}",
+                    f"Scraped: {len(cls.__scraped)}",
+                    f"Valid: {len(cls.result)}",
                     sep=" | ",
                 )
 
         print("Scraping successfully.")
         print(
             f"From: {colorized(cls.__retailer,34)}",
-            f"Scraped: {colorized(len(cls.result),33)}",
+            f"Scraped: {colorized(len(cls.__scraped),33)}",
+            f"Valid: {colorized(len(cls.result),32)}",
             sep=" | ",
         )
+
+    def __history_check():
+        pass
 
     @classmethod
     def reset(cls):
@@ -283,10 +304,10 @@ class CpsScraper:
         Reset scraper after use.
         """
 
+        print(f"Scraper for {CpsScraper.__retailer} reset.")
+
         if cls.save_path:
             cls.save_path = None
 
         cls.__queue.clear()
         cls.result.clear()
-
-        print("Crawler reset.")

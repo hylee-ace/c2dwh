@@ -1,4 +1,4 @@
-import asyncio, multiprocessing, random, time, json
+import asyncio, multiprocessing, random, time
 from webcrawler import Crawler, CpsScraper
 from utils import runtime
 
@@ -59,14 +59,14 @@ def crawling_process():
             "site": "https://cellphones.com.vn/",
             "xpath": f"//a[substring(@href,string-length(@href)-4)='.html'and not({exclude_text})"
             "and contains(@href,'cellphones.com.vn')]/@href",
-            "save_path": "./scripts/webcrawler/crawled/cellphones.csv",
+            "save_path": "./scripts/webcrawler/crawled/cellphones_urls.csv",
             "chunksize": 50,
             "sema": 50,
         },
         {
             "site": "https://www.thegioididong.com/",
             "xpath": "//a[substring(@href,1,7)='/laptop'or substring(@href,1,5)='/dtdd']/@href",
-            "save_path": "./scripts/webcrawler/crawled/tgdd.csv",
+            "save_path": "./scripts/webcrawler/crawled/tgdd_urls.csv",
             "chunksize": 10,
             "sema": 10,
             "delay": random.uniform(0.5, 1.0),
@@ -74,7 +74,7 @@ def crawling_process():
         {
             "site": "https://fptshop.com.vn/",
             "xpath": "//a[substring(@href,1,11)='/dien-thoai'or substring(@href,1,18)='/may-tinh-xach-tay']/@href",
-            "save_path": "./scripts/webcrawler/crawled/fptshop.csv",
+            "save_path": "./scripts/webcrawler/crawled/fptshop_urls.csv",
             "chunksize": 10,
             "sema": 10,
             "delay": random.uniform(0.5, 1.0),
@@ -101,30 +101,31 @@ def crawling_process():
 
 
 def scraping_work():
-    urls = [
-        "https://cellphones.com.vn/iphone-16-pro-max.html",  # phone
-        "https://cellphones.com.vn/laptop-acer-aspire-lite-15-al15-41p-r3u5.html",  # latop
-        "https://cellphones.com.vn/nokia-hmd-105-4g.html",  # phone no discount
-        "https://cellphones.com.vn/laptop-acer-nitro-v-16-propanel-anv16-41-r36y.html",  # upcoming latop
-        "https://cellphones.com.vn/apple-macbook-air-13-m4-10cpu-8gpu-16gb-256gb-2025.html",  # mac
-        "https://cellphones.com.vn/laptop-dell-latitude-e7470.html",  # laptop no price
-        "https://cellphones.com.vn/dien-thoai-masstel-izi-16-4g.html",  # unknown genre
-        "https://cellphones.com.vn/nubia-neo-2.html",  # unknown genre
-        "https://cellphones.com.vn/laptop-hp-omnibook-x-14-fe1010qu-b53kbpa-copilot-x-plus.html",
-        "https://cellphones.com.vn/laptop-lenovo-thinkpad-e16-gen-1-21jn006gvn.html",
-    ]
-    scraper = CpsScraper(urls)
+    urls = []
+    with open("./scripts/webcrawler/crawled/cellphones.csv", "r") as file:
+        next(file)
+        for i in file:
+            urls.append(i.split(",")[0])
 
-    asyncio.run(scraper.execute())
-    for i in scraper.result:
-        print(json.dumps(i, indent=2, ensure_ascii=False))
-        print("-----------")
+    scraper = CpsScraper(
+        urls, save_in="./scripts/webcrawler/data/cellphones_products.csv"
+    )
+
+    asyncio.run(
+        scraper.execute(timeout=20.0, chunksize=50, semaphore=asyncio.Semaphore(50))
+    )
+
+    print(len(scraper.result))
     scraper.reset()
+
+
+# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
 @runtime
 def main():
     # crawling_process()
+    # time.sleep(320)
     scraping_work()
 
 

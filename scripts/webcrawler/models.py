@@ -12,9 +12,10 @@ class Product:
     stock: int = None
     rating: float = None
     reviews_count: int = None
+    is_new: bool = True
+    is_selling: bool = True
     url: str = None
     retailer: str = None
-    is_selling: bool = True
     created_at: datetime = None
     updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -39,8 +40,10 @@ class Phone(Product):
             "rating": self.rating,
             "reviews_count": self.reviews_count,
             "category": self.category,
-            "url": self.url,
+            "is_new": self.is_new,
             "is_selling": self.is_selling,
+            "url": self.url,
+            "retailer": self.retailer,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -68,8 +71,10 @@ class Laptop(Product):
             "rating": self.rating,
             "reviews_count": self.reviews_count,
             "category": self.category,
-            "url": self.url,
+            "is_new": self.is_new,
             "is_selling": self.is_selling,
+            "url": self.url,
+            "retailer": self.retailer,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }

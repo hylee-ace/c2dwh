@@ -1,4 +1,4 @@
-import threading, time, functools, inspect
+import threading, time, functools, inspect, os, csv
 
 
 class Cursor:
@@ -168,3 +168,35 @@ def timetext(second: int | float):
     text = f"{h if h>0 else ''}{'h'if h>0 else ''}{'0' if h>0 and m<10 else ''}{m if m>0 else ''}{'m'if m>0 else ''}{s:.2f}s"
 
     return text
+
+
+def dict_to_csv(data: dict | list[dict], path: str):
+    """
+    Save dict-type or list of dict-type data to given path.
+    """
+
+    if path:
+        if os.path.isdir(path):
+            print(f"Invalid path. {path} is a directory.")
+            return
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    else:
+        print("Invalid path.")
+        return
+
+    mode = "a" if os.path.exists(path) and os.path.getsize(path) else "w"
+    header = data.keys() if isinstance(data, dict) else data[0].keys()
+
+    try:
+        with open(path, mode) as file:
+            writer = csv.DictWriter(file, header)
+            if mode == "w":
+                writer.writeheader()
+            if isinstance(data, dict):
+                writer.writerow(data)
+            else:
+                writer.writerows(data)
+
+    except Exception as e:
+        print(f"Saving to {path} failed >> {e}")
+        return

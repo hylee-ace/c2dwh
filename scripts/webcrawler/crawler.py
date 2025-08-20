@@ -1,7 +1,7 @@
 import asyncio, httpx, os
-from utils import colorized
+from utils import colorized, dict_to_csv
 from lxml import html
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
 
@@ -112,7 +112,7 @@ class Crawler:
             url, client=client, xpath=Crawler.search, semaphore=semaphore
         )
 
-        if not found:  # url broken
+        if not found:  # url might be broken or facing IP banned
             async with Crawler.__lock:
                 Crawler.queue.remove(url)
             return
@@ -130,8 +130,12 @@ class Crawler:
                 Crawler.crawled.add(url)  # put inspected url into crawled
                 Crawler.valid.add(url)  # put only scrapable urls into valid
                 if Crawler.save_path:
-                    Crawler.__save_result(
-                        f"{url}, {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n"
+                    dict_to_csv(
+                        {
+                            "url": url,
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        },
+                        Crawler.save_path,
                     )  # only save new valid urls
 
             Crawler.crawled.update(result)  # also put founded urls into crawled
@@ -244,6 +248,7 @@ class Crawler:
 
         try:
             with open(Crawler.save_path, "r") as file:
+                next(file)
                 for i in file:
                     url = str(i).split(",")[0]
                     Crawler.history.add(url)
@@ -254,30 +259,13 @@ class Crawler:
         except Exception as e:
             print(f"Error occurs while opening file >> {e}")
 
-    def __save_result(url: str):
-        if Crawler.save_path:
-            if os.path.isdir(Crawler.save_path):
-                print(f"Invalid path. {Crawler.save_path} is a directory.")
-                return
-            os.makedirs(os.path.dirname(Crawler.save_path), exist_ok=True)
-        else:
-            print("Invalid path.")
-            return
-
-        mode = "a" if os.path.exists(Crawler.save_path) else "w"
-
-        try:
-            with open(Crawler.save_path, mode) as file:
-                file.write(url)
-        except Exception as e:
-            print(f"Saving to {Crawler.save_path} failed >> {e}")
-            return
-
     @classmethod
     def reset(cls):
         """
         Reset crawler after use.
         """
+
+        print(f"Crawler for {urlparse(cls.base_url).hostname} reset.")
 
         if cls.save_path:
             cls.save_path = None
@@ -287,5 +275,3 @@ class Crawler:
         cls.queue.clear()
         cls.crawled.clear()
         cls.history.clear()
-
-        print("Crawler reset.")

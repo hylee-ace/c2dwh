@@ -16,7 +16,7 @@ class Crawler:
     search: str
         XPath expression used to locate target links in HTML pages.
     save_in: str
-        Path to save output data.
+        Directory for saved output.
     """
 
     base_url = None
@@ -37,7 +37,17 @@ class Crawler:
             Crawler.search = search
 
         if save_in:
-            Crawler.save_path = save_in
+            Crawler.save_path = os.path.join(
+                save_in,
+                "".join(
+                    [
+                        i
+                        for i in urlparse(base_url).hostname.split(".")
+                        if i not in ["com", "vn", "www"]
+                    ]
+                )
+                + ".csv",
+            )
             Crawler.__history_check()
 
     @staticmethod
@@ -274,4 +284,5 @@ class Crawler:
         cls.search = None
         cls.queue.clear()
         cls.crawled.clear()
+        cls.valid.clear()
         cls.history.clear()

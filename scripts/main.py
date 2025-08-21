@@ -6,13 +6,13 @@ from utils import runtime
 def crawling_work(
     site: str,
     xpath: str,
-    save_path: str,
+    dir: str,
     chunksize: int,
     sema: int,
     delay: float = None,
     headers=None,
 ):
-    crawler = Crawler(site, search=xpath, save_in=save_path)
+    crawler = Crawler(site, search=xpath, save_in=dir)
 
     asyncio.run(
         crawler.execute(
@@ -59,14 +59,14 @@ def crawling_process():
             "site": "https://cellphones.com.vn/",
             "xpath": f"//a[substring(@href,string-length(@href)-4)='.html'and not({exclude_text})"
             "and contains(@href,'cellphones.com.vn')]/@href",
-            "save_path": "./scripts/webcrawler/crawled/cellphones_urls.csv",
+            "dir": "./scripts/webcrawler/crawled",
             "chunksize": 50,
             "sema": 50,
         },
         {
             "site": "https://www.thegioididong.com/",
             "xpath": "//a[substring(@href,1,7)='/laptop'or substring(@href,1,5)='/dtdd']/@href",
-            "save_path": "./scripts/webcrawler/crawled/tgdd_urls.csv",
+            "dir": "./scripts/webcrawler/crawled",
             "chunksize": 10,
             "sema": 10,
             "delay": random.uniform(0.5, 1.0),
@@ -74,7 +74,7 @@ def crawling_process():
         {
             "site": "https://fptshop.com.vn/",
             "xpath": "//a[substring(@href,1,11)='/dien-thoai'or substring(@href,1,18)='/may-tinh-xach-tay']/@href",
-            "save_path": "./scripts/webcrawler/crawled/fptshop_urls.csv",
+            "dir": "./scripts/webcrawler/crawled",
             "chunksize": 10,
             "sema": 10,
             "delay": random.uniform(0.5, 1.0),
@@ -102,14 +102,14 @@ def crawling_process():
 
 def scraping_work():
     urls = []
+
+    # get urls from file
     with open("./scripts/webcrawler/crawled/cellphones.csv", "r") as file:
         next(file)
         for i in file:
             urls.append(i.split(",")[0])
 
-    scraper = CpsScraper(
-        urls, save_in="./scripts/webcrawler/data/cellphones_products.csv"
-    )
+    scraper = CpsScraper(urls, save_in="./scripts/webcrawler/data")
 
     asyncio.run(
         scraper.execute(timeout=20.0, chunksize=50, semaphore=asyncio.Semaphore(50))

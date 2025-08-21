@@ -1,4 +1,4 @@
-import httpx, json, asyncio
+import httpx, json, asyncio, os
 from .crawler import Crawler
 from .models import Phone, Laptop
 from utils import colorized, dict_to_csv
@@ -7,8 +7,20 @@ from datetime import datetime
 
 
 class CpsScraper:
-    __retailer = "CellphoneS"
-    save_path = None
+    """
+    Asynchronous URL scraper that fetches desired information from HTML contents.
+
+    Attributes
+    ----------
+    urls: list[str]
+        The list of URLs waiting for being scraped.
+    save_in: str
+        Directory for saved output.
+    """
+
+    __retailer = None
+    files_dir = None
+    file_paths = list()
     result = list()
     __queue = set()
     __scraped = set()
@@ -16,7 +28,10 @@ class CpsScraper:
 
     def __init__(self, urls: list[str], *, save_in: str = None):
         CpsScraper.__queue.update(urls)
-        CpsScraper.save_path = save_in
+
+        if save_in:
+            CpsScraper.files_dir = save_in
+            CpsScraper.__history_check()
 
     @staticmethod
     async def nuxt_to_data(
@@ -128,6 +143,11 @@ class CpsScraper:
                 .split(" ")
                 else True
             )
+            CpsScraper.__retailer = product.retailer = [
+                i.get("content")
+                for i in data["data"][0]["head"]["meta"]
+                if i.get("property") == "og:site_name"
+            ][0]
             product.created_at = datetime.fromisoformat(
                 data["data"][0]["pageInfo"]["created_at"]
             ).strftime("%Y-%m-%d %H:%M:%S")
@@ -140,7 +160,6 @@ class CpsScraper:
                     "name"
                 ],
                 url=url,
-                retailer=CpsScraper.__retailer,
             )
 
             parse_general_info(laptop)
@@ -166,8 +185,14 @@ class CpsScraper:
                 CpsScraper.__scraped.add(url)
                 CpsScraper.__queue.discard(url)
                 CpsScraper.result.append(laptop.info())
-                if CpsScraper.save_path:
-                    dict_to_csv(laptop.info(), CpsScraper.save_path)
+
+                if CpsScraper.files_dir:
+                    dict_to_csv(
+                        laptop.info(),
+                        os.path.join(
+                            CpsScraper.files_dir, laptop.retailer.lower(), "laptops.csv"
+                        ),
+                    )
 
         else:
             phone = Phone(
@@ -176,7 +201,6 @@ class CpsScraper:
                     "name"
                 ],
                 url=url,
-                retailer=CpsScraper.__retailer,
             )
 
             parse_general_info(phone)
@@ -200,8 +224,14 @@ class CpsScraper:
                 CpsScraper.__scraped.add(url)
                 CpsScraper.__queue.discard(url)
                 CpsScraper.result.append(phone.info())
-                if CpsScraper.save_path:
-                    dict_to_csv(phone.info(), CpsScraper.save_path)
+
+                if CpsScraper.files_dir:
+                    dict_to_csv(
+                        phone.info(),
+                        os.path.join(
+                            CpsScraper.files_dir, phone.retailer.lower(), "phones.csv"
+                        ),
+                    )
 
     @classmethod
     async def execute(
@@ -306,8 +336,10 @@ class CpsScraper:
 
         print(f"Scraper for {CpsScraper.__retailer} reset.")
 
-        if cls.save_path:
-            cls.save_path = None
+        if cls.files_dir:
+            cls.files_dir = None
 
+        cls.__retailer = None
         cls.__queue.clear()
+        cls.__scraped.clear()
         cls.result.clear()

@@ -1,5 +1,5 @@
 import asyncio, httpx, os
-from utils import colorized, dict_to_csv
+from utils import colorized, dict_to_csv, csv_reader
 from lxml import html
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
@@ -21,23 +21,23 @@ class Crawler:
 
     base_url = None
     search = None
-    save_path = None
-    queue = set()
-    crawled = set()
-    valid = set()
-    history = set()
+    saving_path = None
+    __queue = set()
+    __crawled = set()
+    result = set()
+    __history = set()
     __lock = asyncio.Lock()
 
     def __init__(self, base_url: str, *, search: str, save_in: str = None):
         if not Crawler.base_url:
             Crawler.base_url = base_url
-            Crawler.queue.add(base_url)
+            Crawler.__queue.add(base_url)
 
         if not Crawler.search:
             Crawler.search = search
 
         if save_in:
-            Crawler.save_path = os.path.join(
+            Crawler.saving_path = os.path.join(
                 save_in,
                 "".join(
                     [
@@ -124,31 +124,31 @@ class Crawler:
 
         if not found:  # url might be broken or facing IP banned
             async with Crawler.__lock:
-                Crawler.queue.remove(url)
+                Crawler.__queue.remove(url)
             return
 
         result = [str(urljoin(Crawler.base_url, i)).strip() for i in found]
 
         # update results
         async with Crawler.__lock:
-            Crawler.queue.remove(url)  # remove inspected url
-            Crawler.queue.update(
-                i for i in result if i not in Crawler.crawled
+            Crawler.__queue.remove(url)  # remove inspected url
+            Crawler.__queue.update(
+                i for i in result if i not in Crawler.__crawled
             )  # put new urls into queue for inspecting
 
-            if url not in Crawler.history:
-                Crawler.crawled.add(url)  # put inspected url into crawled
-                Crawler.valid.add(url)  # put only scrapable urls into valid
-                if Crawler.save_path:
+            if url not in Crawler.__history:
+                Crawler.__crawled.add(url)  # put inspected url into crawled
+                Crawler.result.add(url)  # only save valid urls
+                if Crawler.saving_path:
                     dict_to_csv(
                         {
                             "url": url,
                             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         },
-                        Crawler.save_path,
+                        Crawler.saving_path,
                     )  # only save new valid urls
 
-            Crawler.crawled.update(result)  # also put founded urls into crawled
+            Crawler.__crawled.update(result)  # also put found urls into crawled
 
     @classmethod
     async def execute(
@@ -214,8 +214,8 @@ class Crawler:
             follow_redirects=follow_redirects,
             headers=headers,
         ) as client:
-            while cls.queue:
-                in_use = list(cls.queue)[:chunksize]
+            while cls.__queue:
+                in_use = list(cls.__queue)[:chunksize]
                 tasks = [
                     asyncio.create_task(cls.__crawl(i, client, semaphore))
                     for i in in_use
@@ -228,14 +228,14 @@ class Crawler:
 
                 print(
                     f"From: {cls.base_url}",
-                    f"Pending {len(cls.queue)}",
-                    f"Crawled: {len(cls.crawled)}",
-                    f"Valid: {len(cls.valid)}",
+                    f"Pending {len(cls.__queue)}",
+                    f"Crawled: {len(cls.__crawled)}",
+                    f"Valid: {len(cls.result)}",
                     sep=" | ",
                 )
 
-        if cls.history:
-            new = len(cls.valid - cls.history)
+        if cls.__history:
+            new = len(cls.result - cls.__history)
             text = (
                 f"(Found {new} more {'urls'if new>1 else 'url'})"
                 if new > 0
@@ -245,26 +245,64 @@ class Crawler:
         print("Crawling successfully.")
         print(
             f"From: {colorized( cls.base_url,34)}",
-            f"Crawled: {colorized(len(cls.crawled),33)}",
-            f"Valid: {colorized(len(cls.valid),32)} {text if cls.history else ''}",
+            f"Crawled: {colorized(len(cls.__crawled),33)}",
+            f"Valid: {colorized(len(cls.result),32)} {text if cls.__history else ''}",
             sep=" | ",
         )
 
+        # update crawling history
+        if Crawler.saving_path:
+            Crawler.__save_history()
+
+    def __save_history():
+        path = "./scripts/webcrawler/.history/works.csv"
+
+        try:
+            if not os.path.exists(path) or not os.path.getsize(path):
+                dict_to_csv(
+                    {
+                        "type": "crawling",
+                        "path": Crawler.saving_path,
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                    path,
+                )
+            else:
+                old_time = None
+
+                for i in csv_reader(path):
+                    if i["type"] == "crawling":
+                        old_time = i["created_at"]
+                        break
+
+                dict_to_csv(
+                    {
+                        "type": "crawling",
+                        "path": Crawler.saving_path,
+                        "created_at": old_time,
+                        "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                    path,
+                )
+        except Exception as e:
+            print(f"Error occurs while saving crawling history >> {e}")
+
     def __history_check():
-        if not os.path.isfile(Crawler.save_path):
+        if not os.path.isfile(Crawler.saving_path):
             return
 
         print(f"Previous work with {Crawler.base_url} detected. Continuing...")
 
         try:
-            with open(Crawler.save_path, "r") as file:
+            with open(Crawler.saving_path, "r") as file:
                 next(file)
                 for i in file:
                     url = str(i).split(",")[0]
-                    Crawler.history.add(url)
-                    Crawler.valid.add(url)
-                    Crawler.queue.add(url)
-                    Crawler.crawled.add(url)
+                    Crawler.__history.add(url)
+                    Crawler.result.add(url)
+                    Crawler.__queue.add(url)
+                    Crawler.__crawled.add(url)
             print("History updated.")
         except Exception as e:
             print(f"Error occurs while opening file >> {e}")
@@ -277,12 +315,12 @@ class Crawler:
 
         print(f"Crawler for {urlparse(cls.base_url).hostname} reset.")
 
-        if cls.save_path:
-            cls.save_path = None
+        if cls.saving_path:
+            cls.saving_path = None
 
         cls.base_url = None
         cls.search = None
-        cls.queue.clear()
-        cls.crawled.clear()
-        cls.valid.clear()
-        cls.history.clear()
+        cls.result.clear()
+        cls.__queue.clear()
+        cls.__crawled.clear()
+        cls.__history.clear()

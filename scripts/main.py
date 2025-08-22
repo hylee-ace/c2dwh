@@ -1,6 +1,6 @@
 import asyncio, multiprocessing, random, time
 from webcrawler import Crawler, CpsScraper
-from utils import runtime
+from utils import runtime, csv_reader
 
 
 def crawling_work(
@@ -101,21 +101,13 @@ def crawling_process():
 
 
 def scraping_work():
-    urls = []
-
-    # get urls from file
-    with open("./scripts/webcrawler/crawled/cellphones.csv", "r") as file:
-        next(file)
-        for i in file:
-            urls.append(i.split(",")[0])
-
-    scraper = CpsScraper(urls, save_in="./scripts/webcrawler/data")
+    urls = [i["url"] for i in csv_reader("./scripts/webcrawler/crawled/cellphones.csv")]
+    scraper = CpsScraper(urls, save_in="./scripts/webcrawler/scraped")
 
     asyncio.run(
         scraper.execute(timeout=20.0, chunksize=50, semaphore=asyncio.Semaphore(50))
     )
 
-    print(len(scraper.result))
     scraper.reset()
 
 
@@ -124,9 +116,9 @@ def scraping_work():
 
 @runtime
 def main():
-    # crawling_process()
+    crawling_process()
     # time.sleep(320)
-    scraping_work()
+    # scraping_work()
 
 
 if __name__ == "__main__":

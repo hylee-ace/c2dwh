@@ -172,7 +172,7 @@ def timetext(second: int | float):
 
 def dict_to_csv(data: dict | list[dict], path: str):
     """
-    Save dict-type or list of dict-type data to given path.
+    Save dict-type or list of dict-type data as CSV file.
     """
 
     if path:
@@ -196,7 +196,44 @@ def dict_to_csv(data: dict | list[dict], path: str):
                 writer.writerow(data)
             else:
                 writer.writerows(data)
-
     except Exception as e:
         print(f"Saving to {path} failed >> {e}")
         return
+
+
+def csv_reader(path: str, *, get_fields: str | list[str] = None):
+    """
+    Read CSV file and return list of dict-type data.
+    """
+
+    data = []
+    fields = []
+
+    if os.path.isdir(path):
+        print(f"Invalid path. {path} is a directory.")
+        return
+
+    if get_fields:
+        if isinstance(get_fields, str):
+            fields.append(get_fields)
+        else:
+            fields.extend(get_fields)
+
+    try:
+        if fields:
+            with open(path, "r") as file:
+                reader = csv.DictReader(file, skipinitialspace=True)
+                for i in reader:
+                    new = {}
+                    for j in fields:
+                        new[j] = i.get(j)
+                    data.append(new)
+        else:
+            with open(path, "r") as file:
+                reader = csv.DictReader(file, skipinitialspace=True)
+                for i in reader:
+                    data.append(i)
+    except Exception as e:
+        print(f"Can not read {path} >> {e}")
+    finally:
+        return data

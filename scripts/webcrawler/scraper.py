@@ -1,7 +1,7 @@
 import httpx, json, asyncio, os
 from .crawler import Crawler
 from .models import Phone, Laptop
-from utils import colorized, dict_to_csv
+from utils import colorized, dict_to_csv, csv_reader
 from py_mini_racer.py_mini_racer import MiniRacer
 from datetime import datetime
 
@@ -19,19 +19,16 @@ class CpsScraper:
     """
 
     __retailer = None
-    files_dir = None
-    file_paths = list()
-    result = list()
+    saving_dir = None
+    __file_paths = set()
     __queue = set()
+    result = list()
     __scraped = set()
     __lock = asyncio.Lock()
 
     def __init__(self, urls: list[str], *, save_in: str = None):
         CpsScraper.__queue.update(urls)
-
-        if save_in:
-            CpsScraper.files_dir = save_in
-            CpsScraper.__history_check()
+        CpsScraper.saving_dir = save_in
 
     @staticmethod
     async def nuxt_to_data(
@@ -186,13 +183,12 @@ class CpsScraper:
                 CpsScraper.__queue.discard(url)
                 CpsScraper.result.append(laptop.info())
 
-                if CpsScraper.files_dir:
-                    dict_to_csv(
-                        laptop.info(),
-                        os.path.join(
-                            CpsScraper.files_dir, laptop.retailer.lower(), "laptops.csv"
-                        ),
+                if CpsScraper.saving_dir:
+                    path = os.path.join(
+                        CpsScraper.saving_dir, laptop.retailer.lower(), "laptops.csv"
                     )
+                    CpsScraper.__file_paths.add(path)
+                    dict_to_csv(laptop.info(), path)
 
         else:
             phone = Phone(
@@ -225,13 +221,12 @@ class CpsScraper:
                 CpsScraper.__queue.discard(url)
                 CpsScraper.result.append(phone.info())
 
-                if CpsScraper.files_dir:
-                    dict_to_csv(
-                        phone.info(),
-                        os.path.join(
-                            CpsScraper.files_dir, phone.retailer.lower(), "phones.csv"
-                        ),
+                if CpsScraper.saving_dir:
+                    path = os.path.join(
+                        CpsScraper.saving_dir, phone.retailer.lower(), "phones.csv"
                     )
+                    CpsScraper.__file_paths.add(path)
+                    dict_to_csv(phone.info(), path)
 
     @classmethod
     async def execute(
@@ -325,6 +320,50 @@ class CpsScraper:
             sep=" | ",
         )
 
+        # update scraping history
+        if CpsScraper.saving_dir:
+            CpsScraper.__save_history()
+
+    def __save_history():
+        log = []
+        path = "./scripts/webcrawler/.history/works.csv"
+
+        if not CpsScraper.__file_paths:
+            return
+
+        def parsing(time):
+            nonlocal log
+            for i in CpsScraper.__file_paths:
+                log.append(
+                    {
+                        "type": "scraping",
+                        "path": i,
+                        "created_at": time,
+                        "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                )
+
+        try:
+            if not os.path.exists(path) or not os.path.getsize(path):
+                parsing(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                dict_to_csv(log, path)
+            else:
+                old_time = None
+
+                for i in csv_reader(path):
+                    if i["type"] == "scraping":
+                        old_time = i["created_at"]
+                        break
+
+                parsing(
+                    old_time
+                    if old_time
+                    else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+                dict_to_csv(log, path)
+        except Exception as e:
+            print(f"Error occurs while saving scraping history >> {e}")
+
     def __history_check():
         pass
 
@@ -336,10 +375,11 @@ class CpsScraper:
 
         print(f"Scraper for {CpsScraper.__retailer} reset.")
 
-        if cls.files_dir:
-            cls.files_dir = None
+        if cls.saving_dir:
+            cls.saving_dir = None
 
         cls.__retailer = None
         cls.__queue.clear()
         cls.__scraped.clear()
+        cls.__file_paths.clear()
         cls.result.clear()

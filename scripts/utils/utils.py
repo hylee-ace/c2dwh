@@ -201,32 +201,35 @@ def dict_to_csv(data: dict | list[dict], path: str):
         return
 
 
-def csv_reader(path: str, *, get_fields: str | list[str] = None):
+def csv_reader(path: str, *, fields: str | list[str] = None):
     """
-    Read CSV file and return list of dict-type data.
+    Read CSV file and return list of dict-type data. Can extract by field names.
     """
 
     data = []
-    fields = []
+    header = []
 
     if os.path.isdir(path):
         print(f"Invalid path. {path} is a directory.")
         return
 
-    if get_fields:
-        if isinstance(get_fields, str):
-            fields.append(get_fields)
+    if fields:
+        if isinstance(fields, str):
+            header.append(fields)
         else:
-            fields.extend(get_fields)
+            header.extend(fields)
 
     try:
-        if fields:
+        if header:
             with open(path, "r") as file:
                 reader = csv.DictReader(file, skipinitialspace=True)
                 for i in reader:
                     new = {}
-                    for j in fields:
-                        new[j] = i.get(j)
+                    for j in header:
+                        if j not in reader.fieldnames:
+                            print(f"'{j}' does not exist in header.")
+                            return
+                        new[j] = i[j]
                     data.append(new)
         else:
             with open(path, "r") as file:

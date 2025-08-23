@@ -118,7 +118,14 @@ def scraping_work():
 def main():
     # crawling_process()
     # time.sleep(320)
-    scraping_work()
+    # scraping_work()
+
+    print(
+        csv_reader(
+            "./scripts/webcrawler/scraped/cellphones_products_2025-08-24.csv",
+            fields=["id", "name", "brand"],
+        )[:5]
+    )
 
 
 if __name__ == "__main__":

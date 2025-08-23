@@ -206,10 +206,13 @@ class CpsScraper:
                     + f"{datetime.now().strftime("%Y-%m-%d")}.csv",
                 )
 
-                if os.path.exists(path):  # remove duplicate files in a day
+                # remove duplicate files in a same date
+                if os.path.exists(path):
                     if not CpsScraper.__is_removed and os.path.getsize(path):
                         os.remove(path)
                         CpsScraper.__is_removed = True
+                else:
+                    CpsScraper.__is_removed = True
 
                 dict_to_csv(product.info(), path)
 

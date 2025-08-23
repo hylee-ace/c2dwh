@@ -116,9 +116,9 @@ def scraping_work():
 
 @runtime
 def main():
-    crawling_process()
+    # crawling_process()
     # time.sleep(320)
-    # scraping_work()
+    scraping_work()
 
 
 if __name__ == "__main__":

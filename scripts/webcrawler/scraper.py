@@ -1,7 +1,7 @@
 import httpx, json, asyncio, os
 from .crawler import Crawler
-from .models import Phone, Laptop
-from utils import colorized, dict_to_csv, csv_reader
+from .models import Product
+from utils import colorized, dict_to_csv
 from py_mini_racer.py_mini_racer import MiniRacer
 from datetime import datetime
 
@@ -20,10 +20,10 @@ class CpsScraper:
 
     __retailer = None
     saving_dir = None
-    __file_paths = set()
     __queue = set()
-    result = list()
     __scraped = set()
+    result = list()
+    __is_removed = False
     __lock = asyncio.Lock()
 
     def __init__(self, urls: list[str], *, save_in: str = None):
@@ -87,146 +87,131 @@ class CpsScraper:
                 islaptop = True
                 break
 
+        product = Product(
+            data["data"][0]["pageInfo"]["product_id"],
+            data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
+                "name"
+            ],
+            url=url,
+        )
+
         # parse general info
-        def parse_general_info(product: Laptop | Phone):
-            if data["fetch"]["product-detail:0"]["variants"]:
-                product.price = int(
-                    sum(
-                        [
-                            i["filterable"]["price"]
-                            for i in data["fetch"]["product-detail:0"]["variants"]
-                        ]
-                    )
-                    / len(data["fetch"]["product-detail:0"]["variants"])
+        if data["fetch"]["product-detail:0"]["variants"]:
+            product.price = int(
+                sum(
+                    [
+                        i["filterable"]["price"]
+                        for i in data["fetch"]["product-detail:0"]["variants"]
+                    ]
                 )
-                product.onsale_price = int(
-                    sum(
-                        [
-                            i["filterable"]["special_price"]
-                            for i in data["fetch"]["product-detail:0"]["variants"]
-                        ]
-                    )
-                    / len(data["fetch"]["product-detail:0"]["variants"])
-                )
-                product.stock = sum(
-                    i["filterable"]["stock"]
-                    for i in data["fetch"]["product-detail:0"]["variants"]
-                )
-
-            if data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
-                "json"
-            ].get("aggregateRating"):
-                product.rating = float(
-                    data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
-                        "json"
-                    ]["aggregateRating"]["ratingValue"],
-                )
-                product.reviews_count = int(
-                    data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
-                        "json"
-                    ]["aggregateRating"]["reviewCount"],
-                )
-
-            product.brand = data["fetch"]["product-detail:0"]["headProduct"]["script"][
-                1
-            ]["json"]["brand"]["name"]
-            product.is_new = (
-                False
-                if "cũ"
-                in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
-                    "json"
-                ]["name"]
-                .lower()
-                .split(" ")
-                else True
+                / len(data["fetch"]["product-detail:0"]["variants"])
             )
-            CpsScraper.__retailer = product.retailer = [
-                i.get("content")
-                for i in data["data"][0]["head"]["meta"]
-                if i.get("property") == "og:site_name"
-            ][0]
-            product.created_at = datetime.fromisoformat(
-                data["data"][0]["pageInfo"]["created_at"]
-            ).strftime("%Y-%m-%d %H:%M:%S")
+            product.onsale_price = int(
+                sum(
+                    [
+                        i["filterable"]["special_price"]
+                        for i in data["fetch"]["product-detail:0"]["variants"]
+                    ]
+                )
+                / len(data["fetch"]["product-detail:0"]["variants"])
+            )
+            product.stock = sum(
+                i["filterable"]["stock"]
+                for i in data["fetch"]["product-detail:0"]["variants"]
+            )
 
-        # parse info
-        if islaptop:
-            laptop = Laptop(
-                data["data"][0]["pageInfo"]["product_id"],
+        if data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"].get(
+            "aggregateRating"
+        ):
+            product.rating = float(
                 data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
-                    "name"
-                ],
-                url=url,
+                    "aggregateRating"
+                ]["ratingValue"],
+            )
+            product.reviews_count = int(
+                data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
+                    "aggregateRating"
+                ]["reviewCount"],
             )
 
-            parse_general_info(laptop)
+        product.brand = data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+            "json"
+        ]["brand"]["name"]
+        product.is_new = (
+            False
+            if "cũ"
+            in data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
+                "name"
+            ]
+            .lower()
+            .split(" ")
+            else True
+        )
+        CpsScraper.__retailer = product.retailer = [
+            i.get("content")
+            for i in data["data"][0]["head"]["meta"]
+            if i.get("property") == "og:site_name"
+        ][0]
+        product.created_at = datetime.fromisoformat(
+            data["data"][0]["pageInfo"]["created_at"]
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        os_value = [
+            i["value"]
+            for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                "json"
+            ]["additionalProperty"]
+            if i["name"] == "Hệ điều hành"
+        ]
 
-            # specific info
-            laptop.cpu = [
+        # classify categories
+        if islaptop:
+            product.category = "Laptop"
+            product.os = os_value[0] if os_value else None
+            product.cpu = [
                 i["value"]
                 for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
                     "json"
                 ]["additionalProperty"]
                 if i["name"] == "Loại CPU"
             ][0]
-            laptop.gpu = [
+            product.gpu = [
                 i["value"]
                 for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
                     "json"
                 ]["additionalProperty"]
                 if i["name"] == "Loại card đồ họa"
             ][0]
-
-            # update result
-            async with CpsScraper.__lock:
-                CpsScraper.__scraped.add(url)
-                CpsScraper.__queue.discard(url)
-                CpsScraper.result.append(laptop.info())
-
-                if CpsScraper.saving_dir:
-                    path = os.path.join(
-                        CpsScraper.saving_dir, laptop.retailer.lower(), "laptops.csv"
-                    )
-                    CpsScraper.__file_paths.add(path)
-                    dict_to_csv(laptop.info(), path)
-
         else:
-            phone = Phone(
-                data["data"][0]["pageInfo"]["product_id"],
-                data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
-                    "name"
-                ],
-                url=url,
-            )
-
-            parse_general_info(phone)
-
-            # specific info
-            os_value = [
+            ram_value = [
                 i["value"]
                 for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
                     "json"
                 ]["additionalProperty"]
-                if i["name"] == "Hệ điều hành"
+                if i["name"] == "Dung lượng RAM"
             ]
+            product.category = "Smartphone" if ram_value else "Phone"
+            product.os = os_value[0] if os_value else None
 
-            if os_value:
-                phone.os = os_value[0]
-            else:
-                phone.category = "Phone"
+        # update results
+        async with CpsScraper.__lock:
+            CpsScraper.__scraped.add(url)
+            CpsScraper.__queue.discard(url)
+            CpsScraper.result.append(product.info())
 
-            # update result
-            async with CpsScraper.__lock:
-                CpsScraper.__scraped.add(url)
-                CpsScraper.__queue.discard(url)
-                CpsScraper.result.append(phone.info())
+            if CpsScraper.saving_dir:
+                path = os.path.join(
+                    CpsScraper.saving_dir,
+                    product.retailer.lower()
+                    + "_products_"
+                    + f"{datetime.now().strftime("%Y-%m-%d")}.csv",
+                )
 
-                if CpsScraper.saving_dir:
-                    path = os.path.join(
-                        CpsScraper.saving_dir, phone.retailer.lower(), "phones.csv"
-                    )
-                    CpsScraper.__file_paths.add(path)
-                    dict_to_csv(phone.info(), path)
+                if os.path.exists(path):  # remove duplicate files in a day
+                    if not CpsScraper.__is_removed and os.path.getsize(path):
+                        os.remove(path)
+                        CpsScraper.__is_removed = True
+
+                dict_to_csv(product.info(), path)
 
     @classmethod
     async def execute(
@@ -320,53 +305,6 @@ class CpsScraper:
             sep=" | ",
         )
 
-        # update scraping history
-        if CpsScraper.saving_dir:
-            CpsScraper.__save_history()
-
-    def __save_history():
-        log = []
-        path = "./scripts/webcrawler/.history/works.csv"
-
-        if not CpsScraper.__file_paths:
-            return
-
-        def parsing(time):
-            nonlocal log
-            for i in CpsScraper.__file_paths:
-                log.append(
-                    {
-                        "type": "scraping",
-                        "path": i,
-                        "created_at": time,
-                        "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    }
-                )
-
-        try:
-            if not os.path.exists(path) or not os.path.getsize(path):
-                parsing(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                dict_to_csv(log, path)
-            else:
-                old_time = None
-
-                for i in csv_reader(path):
-                    if i["type"] == "scraping":
-                        old_time = i["created_at"]
-                        break
-
-                parsing(
-                    old_time
-                    if old_time
-                    else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                )
-                dict_to_csv(log, path)
-        except Exception as e:
-            print(f"Error occurs while saving scraping history >> {e}")
-
-    def __history_check():
-        pass
-
     @classmethod
     def reset(cls):
         """
@@ -381,5 +319,4 @@ class CpsScraper:
         cls.__retailer = None
         cls.__queue.clear()
         cls.__scraped.clear()
-        cls.__file_paths.clear()
         cls.result.clear()

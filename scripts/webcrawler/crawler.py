@@ -1,5 +1,5 @@
 import asyncio, httpx, os
-from utils import colorized, dict_to_csv, csv_reader
+from utils import colorized, dict_to_csv
 from lxml import html
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
@@ -249,44 +249,6 @@ class Crawler:
             f"Valid: {colorized(len(cls.result),32)} {text if cls.__history else ''}",
             sep=" | ",
         )
-
-        # update crawling history
-        if Crawler.saving_path:
-            Crawler.__save_history()
-
-    def __save_history():
-        path = "./scripts/webcrawler/.history/works.csv"
-
-        try:
-            if not os.path.exists(path) or not os.path.getsize(path):
-                dict_to_csv(
-                    {
-                        "type": "crawling",
-                        "path": Crawler.saving_path,
-                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    },
-                    path,
-                )
-            else:
-                old_time = None
-
-                for i in csv_reader(path):
-                    if i["type"] == "crawling":
-                        old_time = i["created_at"]
-                        break
-
-                dict_to_csv(
-                    {
-                        "type": "crawling",
-                        "path": Crawler.saving_path,
-                        "created_at": old_time,
-                        "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    },
-                    path,
-                )
-        except Exception as e:
-            print(f"Error occurs while saving crawling history >> {e}")
 
     def __history_check():
         if not os.path.isfile(Crawler.saving_path):

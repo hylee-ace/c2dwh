@@ -6,7 +6,7 @@ from py_mini_racer.py_mini_racer import MiniRacer
 from datetime import datetime
 
 
-class CpsScraper:
+class Scraper:
     """
     Asynchronous URL scraper that fetches desired information from HTML contents.
 
@@ -14,6 +14,8 @@ class CpsScraper:
     ----------
     urls: list[str]
         The list of URLs waiting for being scraped.
+    target:str
+        The website that going to be scraped, currently support **cellphones**, **fptshop** and **tgdd**
     save_in: str
         Directory for saved output.
     """
@@ -26,9 +28,10 @@ class CpsScraper:
     __is_removed = False
     __lock = asyncio.Lock()
 
-    def __init__(self, urls: list[str], *, save_in: str = None):
-        CpsScraper.__queue.update(urls)
-        CpsScraper.saving_dir = save_in
+    def __init__(self, urls: list[str], *, target: str, save_in: str = None):
+        Scraper.__queue.update(urls)
+        Scraper.__retailer = target.upper()
+        Scraper.saving_dir = save_in
 
     @staticmethod
     async def nuxt_to_data(
@@ -67,152 +70,221 @@ class CpsScraper:
         client: httpx.AsyncClient,
         semaphore: asyncio.Semaphore,
     ):
-        data = await CpsScraper.nuxt_to_data(
-            url, client=client, semaphore=semaphore, encoding="utf-8"
-        )
+        data = None
+        product = None
         islaptop = False
 
-        # check if url were product page
-        if not data or "product-detail:0" not in data["fetch"]:
-            async with CpsScraper.__lock:
-                CpsScraper.__scraped.add(url)
-                CpsScraper.__queue.discard(url)
-            return
-
-        # check device type
-        for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
-            "additionalProperty"
-        ]:
-            if i["name"] == "Loại card đồ họa":
-                islaptop = True
-                break
-
-        product = Product(
-            data["data"][0]["pageInfo"]["product_id"],
-            data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
-                "name"
-            ],
-            url=url,
-        )
-
-        # parse general info
-        if data["fetch"]["product-detail:0"]["variants"]:
-            product.price = int(
-                sum(
-                    [
-                        i["filterable"]["price"]
-                        for i in data["fetch"]["product-detail:0"]["variants"]
-                    ]
-                )
-                / len(data["fetch"]["product-detail:0"]["variants"])
-            )
-            product.onsale_price = int(
-                sum(
-                    [
-                        i["filterable"]["special_price"]
-                        for i in data["fetch"]["product-detail:0"]["variants"]
-                    ]
-                )
-                / len(data["fetch"]["product-detail:0"]["variants"])
-            )
-            product.stock = sum(
-                i["filterable"]["stock"]
-                for i in data["fetch"]["product-detail:0"]["variants"]
+        if Scraper.__retailer == "CELLPHONES":
+            data = await Scraper.nuxt_to_data(
+                url, client=client, semaphore=semaphore, encoding="utf-8"
             )
 
-        if data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"].get(
-            "aggregateRating"
-        ):
-            product.rating = float(
-                data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
-                    "aggregateRating"
-                ]["ratingValue"],
-            )
-            product.reviews_count = int(
-                data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
-                    "aggregateRating"
-                ]["reviewCount"],
-            )
+            # check if url were product page
+            if not data or "product-detail:0" not in data["fetch"]:
+                async with Scraper.__lock:
+                    Scraper.__scraped.add(url)
+                    Scraper.__queue.discard(url)
+                return
 
-        product.brand = data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
-            "json"
-        ]["brand"]["name"]
-        product.is_new = (
-            False
-            if "cũ"
-            in data["fetch"]["product-detail:0"]["headProduct"]["script"][1]["json"][
-                "name"
-            ]
-            .lower()
-            .split(" ")
-            else True
-        )
-        CpsScraper.__retailer = product.retailer = [
-            i.get("content")
-            for i in data["data"][0]["head"]["meta"]
-            if i.get("property") == "og:site_name"
-        ][0]
-        product.created_at = datetime.fromisoformat(
-            data["data"][0]["pageInfo"]["created_at"]
-        ).strftime("%Y-%m-%d %H:%M:%S")
-        os_value = [
-            i["value"]
+            # check device type
             for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
                 "json"
-            ]["additionalProperty"]
-            if i["name"] == "Hệ điều hành"
-        ]
+            ]["additionalProperty"]:
+                if i["name"] == "Loại card đồ họa":
+                    islaptop = True
+                    break
 
-        # classify categories
-        if islaptop:
-            product.category = "Laptop"
-            product.os = os_value[0] if os_value else None
-            product.cpu = [
+            product = Product(
+                product_id=data["data"][0]["pageInfo"]["product_id"],
+                name=data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                    "json"
+                ]["name"],
+                url=url,
+                retailer=Scraper.__retailer,
+            )
+
+            # parse general info
+            if data["fetch"]["product-detail:0"]["variants"]:
+                product.onsale_price = int(
+                    sum(
+                        [
+                            i["filterable"]["special_price"]
+                            for i in data["fetch"]["product-detail:0"]["variants"]
+                        ]
+                    )
+                    / len(data["fetch"]["product-detail:0"]["variants"])
+                )
+
+            if data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                "json"
+            ].get("aggregateRating"):
+                product.rating = float(
+                    data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                        "json"
+                    ]["aggregateRating"]["ratingValue"],
+                )
+                product.reviews_count = int(
+                    data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                        "json"
+                    ]["aggregateRating"]["reviewCount"],
+                )
+
+            product.brand = data["fetch"]["product-detail:0"]["headProduct"]["script"][
+                1
+            ]["json"]["brand"]["name"]
+            product.is_new = (
+                False
+                if "cũ"
+                in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                    "json"
+                ]["name"]
+                .lower()
+                .split(" ")
+                else True
+            )
+            product.release_date = datetime.fromisoformat(
+                data["data"][0]["pageInfo"]["created_at"]
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            os_value = [
                 i["value"]
                 for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
                     "json"
                 ]["additionalProperty"]
-                if i["name"] == "Loại CPU"
-            ][0]
-            product.gpu = [
-                i["value"]
-                for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
-                    "json"
-                ]["additionalProperty"]
-                if i["name"] == "Loại card đồ họa"
-            ][0]
-        else:
-            ram_value = [
-                i["value"]
-                for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
-                    "json"
-                ]["additionalProperty"]
-                if i["name"] == "Dung lượng RAM"
+                if i["name"] == "Hệ điều hành"
             ]
-            product.category = "Smartphone" if ram_value else "Phone"
-            product.os = os_value[0] if os_value else None
+
+            # classify categories
+            if islaptop:
+                product.category = "Laptop"
+                product.os = os_value[0] if os_value else None
+                product.cpu = [
+                    i["value"]
+                    for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][
+                        1
+                    ]["json"]["additionalProperty"]
+                    if i["name"] == "Loại CPU"
+                ][0]
+                product.gpu = [
+                    i["value"]
+                    for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][
+                        1
+                    ]["json"]["additionalProperty"]
+                    if i["name"] == "Loại card đồ họa"
+                ][0]
+            else:
+                ram_value = [
+                    i["value"]
+                    for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][
+                        1
+                    ]["json"]["additionalProperty"]
+                    if i["name"] == "Dung lượng RAM"
+                ]
+                product.category = "Smartphone" if ram_value else "Phone"
+                product.os = os_value[0] if os_value else None
+
+        elif Scraper.__retailer == "TGDD":
+            data = await Crawler.async_inspect(
+                url,
+                client=client,
+                xpath='//*[@id="productld"]/text()',
+                semaphore=semaphore,
+                encoding="utf-8",
+            )
+
+            # check if url were product page
+            if not data:
+                async with Scraper.__lock:
+                    Scraper.__scraped.add(url)
+                    Scraper.__queue.discard(url)
+                return
+
+            data = json.loads(data[0])
+
+            # check device type
+            for i in data["additionalProperty"]:
+                if i["name"] == "Card màn hình":
+                    islaptop = True
+                    break
+
+            # parse info
+            product = Product(
+                product_id=data["sku"],
+                name=data["name"],
+                onsale_price=int(data["offers"]["price"]),
+                brand=data["brand"]["name"][0],
+                url=data["url"],
+                retailer=Scraper.__retailer,
+            )
+
+            if data["aggregateRating"]:
+                product.rating = data["aggregateRating"]["ratingValue"]
+                product.reviews_count = data["aggregateRating"]["reviewcount"]
+
+            released_value = [
+                i["value"]
+                for i in data["additionalProperty"]
+                if i["name"] == "Thời điểm ra mắt"
+            ]
+            os_value = [
+                i["value"]
+                for i in data["additionalProperty"]
+                if i["name"] == "Hệ điều hành"
+            ]
+            product.release_date = released_value[0] if released_value else None
+
+            if islaptop:
+                gpu_value = "".join(
+                    [
+                        i["value"]
+                        for i in data["additionalProperty"]
+                        if i["name"] == "Card màn hình"
+                    ][0].split("</a>")
+                )
+                cpu_value = "".join(
+                    [
+                        i["value"]
+                        for i in data["additionalProperty"]
+                        if i["name"] == "Công nghệ CPU"
+                    ][0].split("</a>")
+                )
+                product.category = "Laptop"
+                product.cpu = cpu_value[cpu_value.rfind(">") + 1 :]
+                product.gpu = gpu_value[gpu_value.rfind(">") + 1 :]
+                product.os = os_value[0] if os_value else None
+            else:
+                contact_range = [
+                    i["value"]
+                    for i in data["additionalProperty"]
+                    if i["name"] == "Danh bạ"
+                ][0]
+                product.category = (
+                    "Smartphone" if contact_range == "Không giới hạn" else "Phone"
+                )
+                product.os = os_value[0] if os_value else None
+        else:
+            pass
 
         # update results
-        async with CpsScraper.__lock:
-            CpsScraper.__scraped.add(url)
-            CpsScraper.__queue.discard(url)
-            CpsScraper.result.append(product.info())
+        async with Scraper.__lock:
+            Scraper.__scraped.add(url)
+            Scraper.__queue.discard(url)
+            Scraper.result.append(product.info())
 
-            if CpsScraper.saving_dir:
+            if Scraper.saving_dir:
                 path = os.path.join(
-                    CpsScraper.saving_dir,
-                    product.retailer.lower()
+                    Scraper.saving_dir,
+                    Scraper.__retailer.lower()
                     + "_products_"
                     + f"{datetime.now().strftime("%Y-%m-%d")}.csv",
                 )
 
                 # remove duplicate files in a same date
                 if os.path.exists(path):
-                    if not CpsScraper.__is_removed and os.path.getsize(path):
+                    if not Scraper.__is_removed and os.path.getsize(path):
                         os.remove(path)
-                        CpsScraper.__is_removed = True
+                        Scraper.__is_removed = True
                 else:
-                    CpsScraper.__is_removed = True
+                    Scraper.__is_removed = True
 
                 dict_to_csv(product.info(), path)
 
@@ -265,6 +337,10 @@ class CpsScraper:
             "Pragma": "no-cache",
         }
 
+        if cls.__retailer not in ["CELLPHONES", "TGDD", "FPTSHOP"]:
+            print("Currently only support cellphones, fptshop and tgdd.")
+            return
+
         if not headers:
             headers = default_headers
         else:
@@ -314,7 +390,7 @@ class CpsScraper:
         Reset scraper after use.
         """
 
-        print(f"Scraper for {CpsScraper.__retailer} reset.")
+        print(f"Scraper for {Scraper.__retailer} reset.")
 
         if cls.saving_dir:
             cls.saving_dir = None

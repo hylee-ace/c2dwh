@@ -1,2 +1,3 @@
 from .crawler import Crawler
-from .scraper import CpsScraper
+from .scraper import Scraper
+from .models import Product

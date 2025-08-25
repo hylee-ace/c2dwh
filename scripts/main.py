@@ -8,7 +8,8 @@ def crawling_work(
     xpath: str,
     chunksize: int,
     sema: int,
-    headers=None,
+    headers: dict = None,
+    delay: float = None,
 ):
     crawler = Crawler(site, search=xpath, save_in="./scripts/webcrawler/crawled")
 
@@ -18,7 +19,7 @@ def crawling_work(
             chunksize=chunksize,
             semaphore=asyncio.Semaphore(sema),
             headers=headers,
-            delay=random.uniform(0.5, 1.0),
+            delay=delay,
         )
     )
 
@@ -55,27 +56,17 @@ def crawling_process():
     works = [
         {
             "site": "https://cellphones.com.vn/",
-            "xpath": f"//a[substring(@href,string-length(@href)-4)='.html'and not({exclude_text})"
-            "and contains(@href,'cellphones.com.vn')]/@href",
-            "chunksize": 50,
-            "sema": 50,
+            "xpath": f"//a[substring(@href,string-length(@href)-4)='.html' and not({exclude_text}) and "
+            "contains(@href,'cellphones.com.vn')]/@href",
+            "chunksize": 100,
+            "sema": 100,
         },
         {
             "site": "https://www.thegioididong.com/",
-            "xpath": "//a[substring(@href,1,7)='/laptop'or substring(@href,1,5)='/dtdd']/@href",
-            "chunksize": 10,
-            "sema": 10,
-        },
-        {
-            "site": "https://fptshop.com.vn/",
-            "xpath": "//a[substring(@href,1,11)='/dien-thoai'or substring(@href,1,18)='/may-tinh-xach-tay']/@href",
-            "chunksize": 10,
-            "sema": 10,
-            "headers": {
-                "Cookie": "cf_clearance=srIGkxKx9eUfh_IyuI9WnAahQMhYLxDLV_OrZLt7tNE-1755178655-1.2.1.1-Xc5TgHVNQYiWT_quM0"
-                "rusLbLGFqPgDzYIhkeiR3VcG86GLE.sHvo1W4e1ZleC20ShAdI1I5qpImkx5akP58br_TUez_ssiNKP1VkI7RD6R5LF3TFy6xhM2UqbcW"
-                "kJUEtr1Vd764mpXtlohrtGdinnZanAprOUE9O87IrX8L55zHpRlp24RvK0nNCp8kvrB6k2dy.wszY7tGpKEPYpTR3vbKeq3V1Ggp0tt8oapveC58"
-            },
+            "xpath": "//a[substring(@href,1,7)='/laptop' or substring(@href,1,5)='/dtdd']/@href",
+            "chunksize": 30,
+            "sema": 30,
+            "delay": random.uniform(0.5, 1.0),
         },
     ]
     processes: list[multiprocessing.Process] = []
@@ -96,10 +87,7 @@ def crawling_process():
 
 
 def scraping_work(
-    urls_source: str,
-    target: str,
-    chunksize: int,
-    sema: int,
+    urls_source: str, target: str, chunksize: int, sema: int, delay: float = None
 ):
     urls = [i["url"] for i in csv_reader(urls_source)]
     scraper = Scraper(urls, target=target, save_in="./scripts/webcrawler/scraped")
@@ -109,7 +97,7 @@ def scraping_work(
             timeout=20.0,
             chunksize=chunksize,
             semaphore=asyncio.Semaphore(sema),
-            delay=random.uniform(0.5, 1.0),
+            delay=delay,
         )
     )
 
@@ -127,15 +115,10 @@ def scraping_process():
         {
             "urls_source": "./scripts/webcrawler/crawled/thegioididong.csv",
             "target": "tgdd",
-            "chunksize": 10,
-            "sema": 10,
+            "chunksize": 20,
+            "sema": 20,
+            "delay": random.uniform(0.5, 1.0),
         },
-        # {
-        #     "urls_source": "./scripts/webcrawler/crawled/fptshop.csv",
-        #     "target": "fptshop",
-        #     "chunksize": 10,
-        #     "sema": 10,
-        # },
     ]
     processes: list[multiprocessing.Process] = []
 

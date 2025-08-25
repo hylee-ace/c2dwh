@@ -15,7 +15,7 @@ class Scraper:
     urls: list[str]
         The list of URLs waiting for being scraped.
     target:str
-        The website that going to be scraped, currently support **cellphones**, **fptshop** and **tgdd**
+        The website that going to be scraped, currently support **cellphones** and **tgdd**
     save_in: str
         Directory for saved output.
     """
@@ -108,7 +108,11 @@ class Scraper:
                 product.onsale_price = int(
                     sum(
                         [
-                            i["filterable"]["special_price"]
+                            (
+                                i["filterable"]["special_price"]
+                                if i["filterable"]["special_price"] != 0
+                                else i["filterable"]["price"]
+                            )
                             for i in data["fetch"]["product-detail:0"]["variants"]
                         ]
                     )
@@ -182,7 +186,7 @@ class Scraper:
                 product.category = "Smartphone" if ram_value else "Phone"
                 product.os = os_value[0] if os_value else None
 
-        elif Scraper.__retailer == "TGDD":
+        else:
             data = await Crawler.async_inspect(
                 url,
                 client=client,
@@ -261,8 +265,6 @@ class Scraper:
                     "Smartphone" if contact_range == "Không giới hạn" else "Phone"
                 )
                 product.os = os_value[0] if os_value else None
-        else:
-            pass
 
         # update results
         async with Scraper.__lock:

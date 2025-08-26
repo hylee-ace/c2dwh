@@ -1,4 +1,5 @@
-import threading, time, functools, inspect, os, csv
+import threading, time, functools, inspect, os, csv, boto3, json
+from botocore.exceptions import ClientError as AwsClientError
 
 
 class Cursor:
@@ -239,6 +240,35 @@ def csv_reader(path: str, *, fields: str | list[str] = None):
                 for i in reader:
                     data.append(i)
     except Exception as e:
-        print(f"Can not read {path} >> {e}")
+        print(f"Cannot read {path} >> {e}")
     finally:
         return data
+
+
+def s3_file_uploader(path: str, *, bucket: str, key: str):
+    """
+    Upload file to AWS S3 bucket basing on given key name.
+    """
+
+    if os.path.isdir(path):
+        print(f"Invalid path. {path} is a directory.")
+        return
+
+    # get aws credentials
+    with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
+        content = json.load(file)
+        key_id = content["access_key"]
+        secret_key = content["secrect_access_key"]
+
+    # initialize client
+    s3_client = boto3.client(
+        "s3",
+        region_name="us-east-1",
+        aws_access_key_id=key_id,
+        aws_secret_access_key=secret_key,
+    )
+
+    try:
+        s3_client.upload_file(Filename=path, Bucket=bucket, Key=key)
+    except AwsClientError as e:
+        print(f"Cannot upload {os.path.basename(path)} >> {e.response}")

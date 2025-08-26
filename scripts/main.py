@@ -1,6 +1,7 @@
 import asyncio, multiprocessing, random, time
 from webcrawler import Crawler, Scraper
-from utils import runtime, csv_reader
+from utils import runtime, csv_reader, s3_file_uploader
+from datetime import datetime
 
 
 def crawling_work(
@@ -138,7 +139,13 @@ def scraping_process():
 @runtime
 def main():
     # crawling_process()
-    scraping_process()
+    # scraping_process()
+
+    s3_file_uploader(
+        "./scripts/webcrawler/crawled/thegioididong.csv",
+        bucket="crawling-to-datalake",
+        key=f'crawled/thegioididong_urls_{datetime.now().strftime("%Y-%m-%d")}.csv',
+    )
 
 
 if __name__ == "__main__":

@@ -16,12 +16,12 @@ class Scraper:
         The list of URLs waiting for being scraped.
     target:str
         The website that going to be scraped, currently support **cellphones** and **tgdd**
-    save_in: str
-        Directory for saved output.
+    save_in: str, optional
+        Directory for saved output (default: **None**).
     """
 
     __retailer = None
-    saving_dir = None
+    saving_path = None
     __queue = set()
     __scraped = set()
     result = list()
@@ -31,7 +31,14 @@ class Scraper:
     def __init__(self, urls: list[str], *, target: str, save_in: str = None):
         Scraper.__queue.update(urls)
         Scraper.__retailer = target.upper()
-        Scraper.saving_dir = save_in
+
+        if save_in:
+            Scraper.saving_path = os.path.join(
+                save_in,
+                Scraper.__retailer.lower()
+                + "_products_"
+                + f"{datetime.now().strftime("%Y-%m-%d")}.csv",
+            )
 
     @staticmethod
     async def nuxt_to_data(
@@ -272,23 +279,18 @@ class Scraper:
             Scraper.__queue.discard(url)
             Scraper.result.append(product.info())
 
-            if Scraper.saving_dir:
-                path = os.path.join(
-                    Scraper.saving_dir,
-                    Scraper.__retailer.lower()
-                    + "_products_"
-                    + f"{datetime.now().strftime("%Y-%m-%d")}.csv",
-                )
-
+            if Scraper.saving_path:
                 # remove duplicate files in a same date
-                if os.path.exists(path):
-                    if not Scraper.__is_removed and os.path.getsize(path):
-                        os.remove(path)
+                if os.path.exists(Scraper.saving_path):
+                    if not Scraper.__is_removed and os.path.getsize(
+                        Scraper.saving_path
+                    ):
+                        os.remove(Scraper.saving_path)
                         Scraper.__is_removed = True
                 else:
                     Scraper.__is_removed = True
 
-                dict_to_csv(product.info(), path)
+                dict_to_csv(product.info(), Scraper.saving_path)
 
     @classmethod
     async def execute(
@@ -317,7 +319,7 @@ class Scraper:
         semaphore: asyncio.Semaphore, optional
             Concurrency limit for simultaneous requests, best range in **5-20**.
         delay: float, optional
-            Delay between chunks (default: **2.0**).
+            Delay between chunks (default: **None**).
         """
 
         default_headers = {
@@ -394,8 +396,8 @@ class Scraper:
 
         print(f"Scraper for {Scraper.__retailer} reset.")
 
-        if cls.saving_dir:
-            cls.saving_dir = None
+        if cls.saving_path:
+            cls.saving_path = None
 
         cls.__retailer = None
         cls.__queue.clear()

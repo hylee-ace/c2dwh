@@ -1,4 +1,4 @@
-import asyncio, multiprocessing, random, time
+import asyncio, multiprocessing, random, time, os
 from webcrawler import Crawler, Scraper
 from utils import runtime, csv_reader, s3_file_uploader
 from datetime import datetime
@@ -11,8 +11,9 @@ def crawling_work(
     sema: int,
     headers: dict = None,
     delay: float = None,
+    upload_to_s3: bool = False,
 ):
-    crawler = Crawler(site, search=xpath, save_in="./scripts/webcrawler/crawled")
+    crawler = Crawler(site, search=xpath, save_in="./data/crawled")
 
     asyncio.run(
         crawler.execute(
@@ -24,10 +25,19 @@ def crawling_work(
         )
     )
 
+    if upload_to_s3:
+        bucket = "crawling-to-datalake"
+        filename = os.path.basename(crawler.saving_path).split(".")
+        key = f"crawled/{filename[0]}_urls_{datetime.now().strftime("%Y-%m-%d")}.csv"
+
+        print(f"Start uploading {'.'.join(filename)} to {bucket}...")
+        s3_file_uploader(crawler.saving_path, bucket=bucket, key=key)
+        print(f"Uploading {'.'.join(filename)} successfully.")
+
     crawler.reset()
 
 
-def crawling_process():
+def crawling_process(upload_to_s3: bool = False):
     excludes = [
         "dmca",
         "do-gia-dung",
@@ -57,17 +67,18 @@ def crawling_process():
     works = [
         {
             "site": "https://cellphones.com.vn/",
-            "xpath": f"//a[substring(@href,string-length(@href)-4)='.html' and not({exclude_text}) and "
-            "contains(@href,'cellphones.com.vn')]/@href",
-            "chunksize": 100,
-            "sema": 100,
+            "xpath": f"//a[substring(@href,string-length(@href)-4)='.html' and not({exclude_text}) and contains(@href,'cellphones.com.vn')]/@href",
+            "chunksize": 50,
+            "sema": 50,
+            "upload_to_s3": upload_to_s3,
         },
         {
             "site": "https://www.thegioididong.com/",
             "xpath": "//a[substring(@href,1,7)='/laptop' or substring(@href,1,5)='/dtdd']/@href",
-            "chunksize": 30,
-            "sema": 30,
+            "chunksize": 10,
+            "sema": 10,
             "delay": random.uniform(0.5, 1.0),
+            "upload_to_s3": upload_to_s3,
         },
     ]
     processes: list[multiprocessing.Process] = []
@@ -88,10 +99,15 @@ def crawling_process():
 
 
 def scraping_work(
-    urls_source: str, target: str, chunksize: int, sema: int, delay: float = None
+    urls_source: str,
+    target: str,
+    chunksize: int,
+    sema: int,
+    delay: float = None,
+    upload_to_s3: bool = False,
 ):
     urls = [i["url"] for i in csv_reader(urls_source)]
-    scraper = Scraper(urls, target=target, save_in="./scripts/webcrawler/scraped")
+    scraper = Scraper(urls, target=target, save_in="./data/scraped")
 
     asyncio.run(
         scraper.execute(
@@ -102,23 +118,34 @@ def scraping_work(
         )
     )
 
+    if upload_to_s3:
+        bucket = "crawling-to-datalake"
+        filename = os.path.basename(scraper.saving_path)
+        key = f"scraped/{filename}"
+
+        print(f"Start uploading {filename} to {bucket}...")
+        s3_file_uploader(scraper.saving_path, bucket=bucket, key=key)
+        print(f"Uploading {filename} successfully.")
+
     scraper.reset()
 
 
-def scraping_process():
+def scraping_process(upload_to_s3: bool = False):
     works = [
         {
-            "urls_source": "./scripts/webcrawler/crawled/cellphones.csv",
+            "urls_source": "./data/crawled/cellphones.csv",
             "target": "cellphones",
             "chunksize": 50,
             "sema": 50,
+            "upload_to_s3": upload_to_s3,
         },
         {
-            "urls_source": "./scripts/webcrawler/crawled/thegioididong.csv",
+            "urls_source": "./data/crawled/thegioididong.csv",
             "target": "tgdd",
-            "chunksize": 20,
-            "sema": 20,
+            "chunksize": 10,
+            "sema": 10,
             "delay": random.uniform(0.5, 1.0),
+            "upload_to_s3": upload_to_s3,
         },
     ]
     processes: list[multiprocessing.Process] = []
@@ -138,14 +165,8 @@ def scraping_process():
 
 @runtime
 def main():
-    # crawling_process()
-    # scraping_process()
-
-    s3_file_uploader(
-        "./scripts/webcrawler/crawled/thegioididong.csv",
-        bucket="crawling-to-datalake",
-        key=f'crawled/thegioididong_urls_{datetime.now().strftime("%Y-%m-%d")}.csv',
-    )
+    # crawling_process(upload_to_s3=True)
+    scraping_process(upload_to_s3=True)
 
 
 if __name__ == "__main__":

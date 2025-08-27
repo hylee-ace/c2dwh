@@ -15,8 +15,8 @@ class Crawler:
         The starting URL for the crawling process.
     search: str
         XPath expression used to locate target links in HTML pages.
-    save_in: str
-        Directory for saved output.
+    save_in: str, optional
+        Directory for saved output (default: **None**).
     """
 
     base_url = None
@@ -29,12 +29,9 @@ class Crawler:
     __lock = asyncio.Lock()
 
     def __init__(self, base_url: str, *, search: str, save_in: str = None):
-        if not Crawler.base_url:
-            Crawler.base_url = base_url
-            Crawler.__queue.add(base_url)
-
-        if not Crawler.search:
-            Crawler.search = search
+        Crawler.base_url = base_url
+        Crawler.__queue.add(base_url)
+        Crawler.search = search
 
         if save_in:
             Crawler.saving_path = os.path.join(
@@ -83,7 +80,7 @@ class Crawler:
                     print(f"Inspecting {url} failed >> {e}")
                     return
                 except (httpx.RequestError, httpx.TimeoutException) as e:
-                    print(f"{repr(e)}. Retrying...")
+                    print(f"{repr(e)}. Retry after {delay}sec...")
                     last_exception = e
                     await asyncio.sleep(delay)
 
@@ -177,7 +174,7 @@ class Crawler:
         semaphore: asyncio.Semaphore, optional
             Concurrency limit for simultaneous requests, best range in **5-20**.
         delay: float, optional
-            Delay between chunks (default: **2.0**).
+            Delay between chunks (default: **None**).
         """
 
         default_headers = {

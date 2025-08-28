@@ -1,3 +1,5 @@
-lxml
-httpx
 asyncio
+boto3
+lxml
+pandas
+py-mini-racer

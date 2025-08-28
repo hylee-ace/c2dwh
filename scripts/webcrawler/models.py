@@ -12,6 +12,8 @@ class Product:
     os: str = None
     cpu: str = None
     gpu: str = None
+    ram: str = None
+    storage: str = None
     rating: float = None
     reviews_count: int = None
     is_new: bool = True
@@ -28,8 +30,10 @@ class Product:
             "brand": self.brand,
             "category": self.category,
             "os": self.os,
-            "cpu": self.cpu,
+            "cpu/chipset": self.cpu,
             "gpu": self.gpu,
+            "ram": self.ram,
+            "storage": self.storage,
             "rating": self.rating,
             "reviews_count": self.reviews_count,
             "is_new": self.is_new,

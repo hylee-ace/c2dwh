@@ -2,7 +2,7 @@ import httpx, json, asyncio, os
 from .crawler import Crawler
 from .models import Product
 from utils import colorized, dict_to_csv
-from py_mini_racer.py_mini_racer import MiniRacer
+from py_mini_racer import MiniRacer
 from datetime import datetime
 
 
@@ -142,7 +142,7 @@ class Scraper:
 
             product.brand = data["fetch"]["product-detail:0"]["headProduct"]["script"][
                 1
-            ]["json"]["brand"]["name"]
+            ]["json"]["brand"]["name"].strip()
             product.is_new = (
                 False
                 if "cũ"
@@ -156,6 +156,7 @@ class Scraper:
             product.release_date = datetime.fromisoformat(
                 data["data"][0]["pageInfo"]["created_at"]
             ).strftime("%Y-%m-%d %H:%M:%S")
+
             os_value = [
                 i["value"]
                 for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
@@ -163,35 +164,45 @@ class Scraper:
                 ]["additionalProperty"]
                 if i["name"] == "Hệ điều hành"
             ]
+            ram_value = [
+                i["value"]
+                for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                    "json"
+                ]["additionalProperty"]
+                if i["name"] == "Dung lượng RAM" or i["name"] == "Loại RAM"
+            ]
+            storage_value = [
+                i["value"]
+                for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                    "json"
+                ]["additionalProperty"]
+                if i["name"] == "Bộ nhớ trong" or i["name"] == "Ổ cứng"
+            ]
+            cpu_value = [
+                i["value"]
+                for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
+                    "json"
+                ]["additionalProperty"]
+                if i["name"] == "Loại CPU" or i["name"] == "Chipset"
+            ]
+
+            product.os = os_value[0].strip() if os_value else None
+            product.cpu = cpu_value[0].strip() if cpu_value else None
+            product.ram = " ".join(ram_value).strip() if ram_value else None
+            product.storage = storage_value[0].strip() if storage_value else None
 
             # classify categories
             if islaptop:
                 product.category = "Laptop"
-                product.os = os_value[0] if os_value else None
-                product.cpu = [
-                    i["value"]
-                    for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][
-                        1
-                    ]["json"]["additionalProperty"]
-                    if i["name"] == "Loại CPU"
-                ][0]
                 product.gpu = [
                     i["value"]
                     for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][
                         1
                     ]["json"]["additionalProperty"]
                     if i["name"] == "Loại card đồ họa"
-                ][0]
+                ][0].strip()
             else:
-                ram_value = [
-                    i["value"]
-                    for i in data["fetch"]["product-detail:0"]["headProduct"]["script"][
-                        1
-                    ]["json"]["additionalProperty"]
-                    if i["name"] == "Dung lượng RAM"
-                ]
                 product.category = "Smartphone" if ram_value else "Phone"
-                product.os = os_value[0] if os_value else None
 
         else:
             data = await Crawler.async_inspect(
@@ -219,17 +230,17 @@ class Scraper:
 
             # parse info
             product = Product(
-                product_id=data["sku"],
-                name=data["name"],
+                product_id=data["sku"].strip(),
+                name=data["name"].strip(),
                 onsale_price=int(data["offers"]["price"]),
-                brand=data["brand"]["name"][0],
-                url=data["url"],
+                brand=data["brand"]["name"][0].strip(),
+                url=data["url"].strip(),
                 retailer=Scraper.__retailer,
             )
 
             if data["aggregateRating"]:
                 product.rating = data["aggregateRating"]["ratingValue"]
-                product.reviews_count = data["aggregateRating"]["reviewcount"]
+                product.reviews_count = int(data["aggregateRating"]["reviewcount"])
 
             released_value = [
                 i["value"]
@@ -241,8 +252,37 @@ class Scraper:
                 for i in data["additionalProperty"]
                 if i["name"] == "Hệ điều hành"
             ]
-            product.release_date = released_value[0] if released_value else None
+            ram_value = [
+                i["value"] if i["value"] != "Hãng không công bố" else ""
+                for i in data["additionalProperty"]
+                if i["name"] == "RAM"
+                or i["name"] == "Loại RAM"
+                or i["name"] == "Tốc độ Bus RAM"
+            ]
+            cpu_value = [
+                (
+                    "".join(i["value"].split("</a>"))[
+                        "".join(i["value"].split("</a>")).rfind(">") + 1 :
+                    ]
+                    if i["name"] == "Công nghệ CPU"
+                    else i["value"]
+                )
+                for i in data["additionalProperty"]
+                if i["name"] == "Chip xử lý (CPU)" or i["name"] == "Công nghệ CPU"
+            ]
+            storage_value = [
+                i["value"]
+                for i in data["additionalProperty"]
+                if i["name"] == "Dung lượng lưu trữ" or i["name"] == "Ổ cứng"
+            ]
 
+            product.release_date = released_value[0].strip() if released_value else None
+            product.os = os_value[0].strip() if os_value else None
+            product.ram = " ".join(ram_value).strip() if ram_value else None
+            product.cpu = cpu_value[0].strip() if cpu_value else None
+            product.storage = storage_value[0].strip() if storage_value else None
+
+            # classify categories
             if islaptop:
                 gpu_value = "".join(
                     [
@@ -251,17 +291,8 @@ class Scraper:
                         if i["name"] == "Card màn hình"
                     ][0].split("</a>")
                 )
-                cpu_value = "".join(
-                    [
-                        i["value"]
-                        for i in data["additionalProperty"]
-                        if i["name"] == "Công nghệ CPU"
-                    ][0].split("</a>")
-                )
                 product.category = "Laptop"
-                product.cpu = cpu_value[cpu_value.rfind(">") + 1 :]
-                product.gpu = gpu_value[gpu_value.rfind(">") + 1 :]
-                product.os = os_value[0] if os_value else None
+                product.gpu = gpu_value[gpu_value.rfind(">") + 1 :].strip()
             else:
                 contact_range = [
                     i["value"]
@@ -271,7 +302,6 @@ class Scraper:
                 product.category = (
                     "Smartphone" if contact_range == "Không giới hạn" else "Phone"
                 )
-                product.os = os_value[0] if os_value else None
 
         # update results
         async with Scraper.__lock:

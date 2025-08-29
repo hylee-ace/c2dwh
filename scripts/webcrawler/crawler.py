@@ -43,7 +43,7 @@ class Crawler:
                         if i not in ["com", "vn", "www"]
                     ]
                 )
-                + ".csv",
+                + "_urls.csv",
             )
             Crawler.__history_check()
 

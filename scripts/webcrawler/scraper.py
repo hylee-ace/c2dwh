@@ -105,7 +105,7 @@ class Scraper:
                 product_id=data["data"][0]["pageInfo"]["product_id"],
                 name=data["fetch"]["product-detail:0"]["headProduct"]["script"][1][
                     "json"
-                ]["name"],
+                ]["name"].strip(),
                 url=url,
                 retailer=Scraper.__retailer,
             )

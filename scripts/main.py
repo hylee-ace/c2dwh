@@ -26,13 +26,16 @@ def crawling_work(
     )
 
     if upload_to_s3:
-        bucket = "crawling-to-datalake"
-        filename = os.path.basename(crawler.saving_path).split(".")
-        key = f"crawled/{filename[0]}_urls_{datetime.now().strftime("%Y-%m-%d")}.csv"
+        if len(crawler.result - crawler._Crawler__history) > 0:
+            bucket = "crawling-to-datalake"
+            filename = os.path.basename(crawler.saving_path)
+            key = f"crawled/{filename}"
 
-        print(f"Start uploading {'.'.join(filename)} to {bucket}...")
-        s3_file_uploader(crawler.saving_path, bucket=bucket, key=key)
-        print(f"Uploading {'.'.join(filename)} successfully.")
+            print(f"Start uploading {filename} to {bucket}...")
+            s3_file_uploader(crawler.saving_path, bucket=bucket, key=key)
+            print(f"Uploading {filename} successfully.")
+        else:
+            print("Uploading cancelled since no more urls found.")
 
     crawler.reset()
 

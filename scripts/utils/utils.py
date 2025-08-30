@@ -205,7 +205,7 @@ def dict_to_csv(data: dict | list[dict], path: str):
         return
 
 
-def csv_reader(path: str, *, fields: str | list[str] = None):
+def csv_reader(path: str, *, fields: str | list[str] | None = None):
     """
     Read CSV file and return list of dict-type data. Can extract by field names.
     """
@@ -246,7 +246,9 @@ def csv_reader(path: str, *, fields: str | list[str] = None):
         return data
 
 
-def s3_file_uploader(path: str, *, client: BaseClient = None, bucket: str, key: str):
+def s3_file_uploader(
+    path: str, *, client: BaseClient | None = None, bucket: str, key: str
+):
     """
     Upload file to AWS S3 bucket basing on given key name.
     """

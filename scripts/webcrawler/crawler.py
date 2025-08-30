@@ -1,5 +1,5 @@
 import asyncio, httpx, os
-from utils import colorized, dict_to_csv
+from utils import colorized, dict_to_csv, s3_file_uploader
 from lxml import html
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
@@ -17,6 +17,10 @@ class Crawler:
         XPath expression used to locate target links in HTML pages.
     save_in: str, optional
         Directory for saved output (default: **None**).
+    upload_to_s3: bool, optional
+        For uploading result file to AWS S3 bucket (default: **False**).
+    s3_attrs: dict, optional
+        Provide S3 attributes such as **client** (optional), **bucket** and **obj_prefix** for uploading (default: **None**).
     """
 
     base_url = None
@@ -26,9 +30,19 @@ class Crawler:
     __crawled = set()
     result = set()
     __history = set()
+    upload_to_s3 = False
+    s3_attrs = dict()
     __lock = asyncio.Lock()
 
-    def __init__(self, base_url: str, *, search: str, save_in: str = None):
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        search: str,
+        save_in: str | None = None,
+        upload_to_s3: bool = False,
+        s3_attrs: dict | None = None,
+    ):
         Crawler.base_url = base_url
         Crawler.__queue.add(base_url)
         Crawler.search = search
@@ -47,16 +61,35 @@ class Crawler:
             )
             Crawler.__history_check()
 
+        if upload_to_s3:
+            if not s3_attrs:  # not provide s3 attributes
+                print(
+                    "S3 attributes such as client (optional), bucket and obj_prefix are required."
+                )
+                exit(1)
+
+            if not all(
+                [
+                    True if i in ["client", "bucket", "obj_prefix"] else False
+                    for i in s3_attrs.keys()
+                ]
+            ):  # giving invalid attrs
+                print("Invalid S3 attributes.")
+                exit(1)
+
+            Crawler.upload_to_s3 = upload_to_s3
+            Crawler.s3_attrs = s3_attrs
+
     @staticmethod
     async def async_inspect(
         url,
         *,
-        client: httpx.AsyncClient = None,
-        xpath: str = None,
-        semaphore: asyncio.Semaphore = None,
-        encoding: str = None,
+        client: httpx.AsyncClient | None = None,
+        xpath: str | None = None,
+        semaphore: asyncio.Semaphore | None = None,
+        encoding: str | None = None,
         retries: int = 3,
-        delay: float = 2.0,
+        retry_delay: float = 2.0,
     ):
         """
         Asynchronously inspect HTML content from given URL.
@@ -80,9 +113,9 @@ class Crawler:
                     print(f"Inspecting {url} failed >> {e}")
                     return
                 except (httpx.RequestError, httpx.TimeoutException) as e:
-                    print(f"{repr(e)}. Retry after {delay}sec...")
+                    print(f"{repr(e)}. Retry after {retry_delay}sec...")
                     last_exception = e
-                    await asyncio.sleep(delay)
+                    await asyncio.sleep(retry_delay)
 
         async with semaphore:
             if client:  # global client
@@ -153,10 +186,10 @@ class Crawler:
         *,
         timeout: int | float = 10.0,
         follow_redirects: bool = True,
-        headers: httpx.Headers = None,
+        headers: httpx.Headers | None = None,
         chunksize: int = 20,
-        semaphore: asyncio.Semaphore = None,
-        delay: float = None,
+        semaphore: asyncio.Semaphore | None = None,
+        delay: float | None = None,
     ):
         """
         Start crawling process from given base URL.
@@ -246,6 +279,24 @@ class Crawler:
             f"Valid: {colorized(len(cls.result),32)} {text if cls.__history else ''}",
             sep=" | ",
         )
+
+        # upload to s3 bucket
+        if cls.upload_to_s3 and cls.s3_attrs:
+            if len(cls.result - cls.__history) > 0:
+                bucket = cls.s3_attrs["bucket"]
+                filename = os.path.basename(cls.saving_path)
+                key = f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}{filename}"
+
+                print(f"Start uploading {filename} to {bucket}...")
+                s3_file_uploader(
+                    cls.saving_path,
+                    client=cls.s3_attrs.get("client"),
+                    bucket=bucket,
+                    key=key,
+                )
+                print(f"Uploading {filename} successfully.")
+            else:
+                print("Uploading cancelled since no more urls found.")
 
     def __history_check():
         if not os.path.isfile(Crawler.saving_path):

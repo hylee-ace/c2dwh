@@ -93,6 +93,7 @@ class Laptop(Product):
         }
 
 
+@dataclass
 class Tablet(Product):
     chipset: str | None = None
     chipset_speed: str | None = None
@@ -132,6 +133,7 @@ class Tablet(Product):
         }
 
 
+@dataclass
 class Smartwatch(Product):
     chipset: str | None = None
     storage: str | None = None
@@ -163,10 +165,12 @@ class Smartwatch(Product):
         }
 
 
+@dataclass
 class Earphone(Product):
     control: str | None = None
     connectivity: str | None = None
     battery: str | None = None
+    case_battery: str | None = None
 
     def info(self):
         return {
@@ -178,6 +182,7 @@ class Earphone(Product):
             "control": self.control,
             "connectivity": self.connectivity,
             "battery": self.battery,
+            "case_battery": self.case_battery,
             "rating": self.rating,
             "reviews_count": self.reviews_count,
             "url": self.url,
@@ -186,6 +191,7 @@ class Earphone(Product):
         }
 
 
+@dataclass
 class Screen(Product):
     scr_size: str | None = None
     scr_tech: str | None = None

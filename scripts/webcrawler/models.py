@@ -6,41 +6,210 @@ from datetime import datetime
 class Product:
     product_id: int
     name: str
-    onsale_price: int | None = None
+    price: int | None = None
     brand: str | None = None
     category: str | None = None
     rating: float | None = None
     reviews_count: int | None = None
     url: str | None = None
     release_date: datetime | None = None
-    updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+@dataclass
+class Smartphone(Product):
+    chipset: str | None = None
+    ram: str | None = None
+    storage: str | None = None
+    scr_size: str | None = None
+    scr_tech: str | None = None
+    scr_res: str | None = None
+    scr_freq: str | None = None
+    os: str | None = None
+    battery: str | None = None
 
     def info(self):
         return {
             "id": self.product_id,
             "name": self.name,
-            "onsale_price": self.onsale_price,
+            "price": self.price,
             "brand": self.brand,
             "category": self.category,
-            "os": self.os,
-            "cpu/chipset": self.cpu,
-            "gpu": self.gpu,
+            "chipset": self.chipset,
             "ram": self.ram,
             "storage": self.storage,
+            "screen_size": self.scr_size,
+            "screen_tech": self.scr_tech,
+            "screen_resolution": self.scr_res,
+            "screen_frequency": self.scr_freq,
+            "operating_system": self.os,
+            "battery": self.battery,
             "rating": self.rating,
             "reviews_count": self.reviews_count,
             "url": self.url,
             "created_at": self.release_date,
-            "updated_at": self.updated_at,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
 
-"""
-product: name, brand, price, category, rating, reviews count, url, release date, updated at
-phone: ram, os, chipset, storage, screen size, battery, screen tech, screen frequency
-laptop: ram, os, cpu, gpu, storage, screen size, battery, screen tech, screen frequency
-tablet: ram, os, chipset, storage, screen size, battery
-smartwatch: screen tech, screen size, connection, cpu, os, storage, battery
-twsearphones: control, connectivity, battery
-screen: screen size, screen tech, frequency, power consumption, connection ports
-"""
+@dataclass
+class Laptop(Product):
+    cpu: str | None = None
+    cpu_speed: str | None = None
+    gpu: str | None = None
+    ram: str | None = None
+    ram_tech: str | None = None
+    storage: str | None = None
+    scr_size: str | None = None
+    scr_tech: str | None = None
+    scr_res: str | None = None
+    scr_freq: str | None = None
+    os: str | None = None
+    battery: str | None = None
+
+    def info(self):
+        return {
+            "id": self.product_id,
+            "name": self.name,
+            "price": self.price,
+            "brand": self.brand,
+            "category": self.category,
+            "cpu": self.cpu,
+            "cpu_speed": self.cpu_speed,
+            "gpu": self.gpu,
+            "ram": self.ram,
+            "ram_tech": self.ram_tech,
+            "storage": self.storage,
+            "screen_size": self.scr_size,
+            "screen_tech": self.scr_tech,
+            "screen_resolution": self.scr_res,
+            "screen_frequency": self.scr_freq,
+            "operating_system": self.os,
+            "battery": self.battery,
+            "rating": self.rating,
+            "reviews_count": self.reviews_count,
+            "url": self.url,
+            "created_at": self.release_date,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
+class Tablet(Product):
+    chipset: str | None = None
+    chipset_speed: str | None = None
+    gpu: str | None = None
+    ram: str | None = None
+    storage: str | None = None
+    scr_size: str | None = None
+    scr_tech: str | None = None
+    scr_res: str | None = None
+    scr_freq: str | None = None
+    os: str | None = None
+    battery: str | None = None
+
+    def info(self):
+        return {
+            "id": self.product_id,
+            "name": self.name,
+            "price": self.price,
+            "brand": self.brand,
+            "category": self.category,
+            "chipset": self.chipset,
+            "chipset_speed": self.chipset_speed,
+            "gpu": self.gpu,
+            "ram": self.ram,
+            "storage": self.storage,
+            "screen_size": self.scr_size,
+            "screen_tech": self.scr_tech,
+            "screen_resolution": self.scr_res,
+            "screen_frequency": self.scr_freq,
+            "operating_system": self.os,
+            "battery": self.battery,
+            "rating": self.rating,
+            "reviews_count": self.reviews_count,
+            "url": self.url,
+            "created_at": self.release_date,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
+class Smartwatch(Product):
+    chipset: str | None = None
+    storage: str | None = None
+    scr_size: str | None = None
+    scr_tech: str | None = None
+    os: str | None = None
+    connectivity: str | None = None
+    battery: str | None = None
+
+    def info(self):
+        return {
+            "id": self.product_id,
+            "name": self.name,
+            "price": self.price,
+            "brand": self.brand,
+            "category": self.category,
+            "chipset": self.chipset,
+            "storage": self.storage,
+            "screen_size": self.scr_size,
+            "screen_tech": self.scr_tech,
+            "operating_system": self.os,
+            "connectivity": self.connectivity,
+            "battery": self.battery,
+            "rating": self.rating,
+            "reviews_count": self.reviews_count,
+            "url": self.url,
+            "created_at": self.release_date,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
+class Earphone(Product):
+    control: str | None = None
+    connectivity: str | None = None
+    battery: str | None = None
+
+    def info(self):
+        return {
+            "id": self.product_id,
+            "name": self.name,
+            "price": self.price,
+            "brand": self.brand,
+            "category": self.category,
+            "control": self.control,
+            "connectivity": self.connectivity,
+            "battery": self.battery,
+            "rating": self.rating,
+            "reviews_count": self.reviews_count,
+            "url": self.url,
+            "created_at": self.release_date,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
+class Screen(Product):
+    scr_size: str | None = None
+    scr_tech: str | None = None
+    scr_res: str | None = None
+    scr_freq: str | None = None
+    power_csp: str | None = None
+    ports: str | None = None
+
+    def info(self):
+        return {
+            "id": self.product_id,
+            "name": self.name,
+            "price": self.price,
+            "brand": self.brand,
+            "category": self.category,
+            "screen_size": self.scr_size,
+            "screen_tech": self.scr_tech,
+            "screen_resolution": self.scr_res,
+            "screen_frequency": self.scr_freq,
+            "power_consumption": self.power_csp,
+            "ports": self.ports,
+            "rating": self.rating,
+            "reviews_count": self.reviews_count,
+            "url": self.url,
+            "created_at": self.release_date,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }

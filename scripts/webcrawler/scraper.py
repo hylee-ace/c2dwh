@@ -1,4 +1,4 @@
-import httpx, json, asyncio, os
+import httpx, json, asyncio, os, re
 from .crawler import Crawler
 from .models import Product, Smartwatch, Smartphone, Laptop, Screen, Tablet, Earphone
 from utils import colorized, dict_to_csv
@@ -22,30 +22,29 @@ class Scraper:
     """
 
     __retailer = None
-    saving_path = None
+    saving_dir = None
+    __saving_paths = dict()  # inclust path and is_removed status (1 and 0)
     __queue = set()
     __scraped = set()
     result = list()
-    __is_removed = False
     __lock = asyncio.Lock()
 
     def __init__(self, urls: list[str], *, save_in: str = None):
         Scraper.__queue.update(urls)
-
-        retailer = "".join(
+        Scraper.__retailer = "".join(
             [
                 i
                 for i in urlparse(urls[0]).hostname.split(".")
                 if i not in ["com", "vn", "www"]
             ]
-        )
-        Scraper.__retailer = retailer.upper()
+        ).upper()
 
         if save_in:
-            Scraper.saving_path = os.path.join(
-                save_in,
-                f"{retailer}_products_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            )
+            Scraper.saving_dir = save_in
+            # Scraper.saving_dir = os.path.join(
+            #     save_in,
+            #     f"{retailer}_products_{datetime.now().strftime("%Y-%m-%d")}.csv",
+            # )
 
     @staticmethod
     async def nuxt_to_data(
@@ -79,13 +78,85 @@ class Scraper:
         # load to json
         return json.loads(data)
 
-    async def __parse_data(
+    def __parse_common_info(data: dict):
+        prd = Product(
+            product_id=data["sku"].strip(),
+            name=data["name"].strip(),
+            price=int(data["offers"]["price"]),
+            brand=data["brand"]["name"][0].strip(),
+            url=data["url"].strip(),
+        )
+
+        if data["aggregateRating"]:
+            prd.rating = data["aggregateRating"]["ratingValue"]
+            prd.reviews_count = int(data["aggregateRating"]["reviewcount"])
+
+        released_value = [
+            i["value"].strip()
+            for i in data["additionalProperty"]
+            if i["name"] == "Thời điểm ra mắt"
+            or i["name"] == "Thời gian ra mắt"
+            or i["name"] == "Năm ra mắt"
+        ]
+        prd.release_date = released_value[0] if released_value else None
+
+        # check device type
+        weight_value = [
+            i["value"].split(" - ")[-1].strip()
+            for i in data["additionalProperty"]
+            if i["name"] == "Kích thước, khối lượng" or i["name"] == "Khối lượng"
+        ]
+        jack_value = [
+            i["value"].strip()
+            for i in data["additionalProperty"]
+            if i["name"] == "Jack cắm"
+        ]
+
+        if prd.url.split("/")[3] == "laptop":  # classify by url hint
+            prd.category = "Laptop"
+        elif prd.url.split("/")[3] == "may-tinh-bang":
+            prd.category = "Tablet"
+        elif prd.url.split("/")[3] == "man-hinh-may-tinh":
+            prd.category = "Screen"
+        else:  # classify by weight
+            if weight_value:
+                g_vals = re.findall(r"(\d+\.?\d*)\s?(?:g|\()", weight_value[0])
+                gam = float(g_vals[0]) if g_vals else None  # actual weight value in gam
+
+                if prd.url.split("/")[3] == "dtdd":
+                    prd.category = "Smartphone" if gam and gam > 135.0 else "Phone"
+                elif prd.url.split("/")[3] == "dong-ho-thong-minh":
+                    prd.category = "Smartwatch" if gam and gam > 30.0 else "Smartband"
+                else:
+                    prd.category = (
+                        "Headphone"
+                        if gam and gam > 100.0
+                        else "Earphone" if jack_value else "Earbuds"
+                    )
+
+        return {
+            "product_id": prd.product_id,
+            "name": prd.name,
+            "price": prd.price,
+            "brand": prd.brand,
+            "category": prd.category,
+            "rating": prd.rating,
+            "reviews_count": prd.reviews_count,
+            "url": prd.url,
+            "release_date": prd.release_date,
+        }
+
+    def __parse_specs_info(data: dict):
+        pass
+
+    async def __scrape(
         url: str,
         client: httpx.AsyncClient,
         semaphore: asyncio.Semaphore,
     ):
         data = None
         product = None
+        path = None
 
         data = await Crawler.async_inspect(
             url,
@@ -104,96 +175,55 @@ class Scraper:
 
         data = json.loads(data[0])
 
-        # general info parser
-        def parse_common_info(data: dict):
-            prd = Product(
-                product_id=data["sku"].strip(),
-                name=data["name"].strip(),
-                price=int(data["offers"]["price"]),
-                brand=data["brand"]["name"][0].strip(),
-                url=data["url"].strip(),
-            )
-
-            if data["aggregateRating"]:
-                prd.rating = data["aggregateRating"]["ratingValue"]
-                prd.reviews_count = int(data["aggregateRating"]["reviewcount"])
-
-            released_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Thời điểm ra mắt"
-                or i["name"] == "Thời gian ra mắt"
-                or i["name"] == "Năm ra mắt"
-            ]
-            weight_value = [
-                i["value"]
-                .split(" - ")[-1]
-                .removesuffix("g")
-                .removeprefix("Nặng")
-                .strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Kích thước, khối lượng" or i["name"] == "Khối lượng"
-            ]
-            jack_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Jack cắm"
-            ]
-
-            prd.release_date = released_value[0] if released_value else None
-
-            # check device type
-            if prd.url.split("/")[3] == "dtdd":
-                prd.category = (
-                    "Smartphone"
-                    if weight_value and float(weight_value[0]) > 135.0
-                    else "Phone"
-                )
-            elif prd.url.split("/")[3] == "laptop":
-                prd.category = "Laptop"
-            elif prd.url.split("/")[3] == "dong-ho-thong-minh":
-                prd.category = (
-                    "Smartwatch"
-                    if weight_value and float(weight_value[0]) > 30.0
-                    else "Smartband"
-                )
-            elif prd.url.split("/")[3] == "may-tinh-bang":
-                prd.category = "Tablet"
-            elif prd.url.split("/")[3] == "tai-nghe":
-                if weight_value and float(weight_value[0]) > 190.0:
-                    prd.category = "Headphone"
-                elif jack_value:
-                    prd.category = "Earphone"
-                elif not jack_value:
-                    prd.category = "Earbuds"
-            else:
-                prd.category = "Screen"
-
-            return {
-                "product_id": prd.product_id,
-                "name": prd.name,
-                "price": prd.price,
-                "brand": prd.brand,
-                "category": prd.category,
-                "url": prd.url,
-                "rating": prd.rating,
-                "reviews_count": prd.reviews_count,
-                "release_date": prd.release_date,
-            }
-
-        # parse general info
+        # parse product info
         if url.split("/")[3] == "dtdd":
-            product = Smartphone(**parse_common_info(data))
-        elif url.split("/")[3] == "latop":
-            product = Laptop(**parse_common_info(data))
+            product = Smartphone(**Scraper.__parse_common_info(data))
+            path = os.path.join(
+                Scraper.saving_dir,
+                f"{Scraper.__retailer.lower()}_smartphones_{datetime.now().strftime("%Y-%m-%d")}.csv",
+            )
+            if not Scraper.__saving_paths.get(path):
+                Scraper.__saving_paths[path] = 0
+        elif url.split("/")[3] == "laptop":
+            product = Laptop(**Scraper.__parse_common_info(data))
+            path = os.path.join(
+                Scraper.saving_dir,
+                f"{Scraper.__retailer.lower()}_laptops_{datetime.now().strftime("%Y-%m-%d")}.csv",
+            )
+            if not Scraper.__saving_paths.get(path):
+                Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "may-tinh-bang":
-            product = Tablet(**parse_common_info(data))
+            product = Tablet(**Scraper.__parse_common_info(data))
+            path = os.path.join(
+                Scraper.saving_dir,
+                f"{Scraper.__retailer.lower()}_tablets_{datetime.now().strftime("%Y-%m-%d")}.csv",
+            )
+            if not Scraper.__saving_paths.get(path):
+                Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "dong-ho-thong-minh":
-            product = Smartwatch(**parse_common_info(data))
+            product = Smartwatch(**Scraper.__parse_common_info(data))
+            path = os.path.join(
+                Scraper.saving_dir,
+                f"{Scraper.__retailer.lower()}_smartwatches_{datetime.now().strftime("%Y-%m-%d")}.csv",
+            )
+            if not Scraper.__saving_paths.get(path):
+                Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "tai-nghe":
-            product = Earphone(**parse_common_info(data))
-        else:
-            product = Screen(**parse_common_info(data))
+            product = Earphone(**Scraper.__parse_common_info(data))
+            path = os.path.join(
+                Scraper.saving_dir,
+                f"{Scraper.__retailer.lower()}_earphones_{datetime.now().strftime("%Y-%m-%d")}.csv",
+            )
+            if not Scraper.__saving_paths.get(path):
+                Scraper.__saving_paths[path] = 0
+        elif url.split("/")[3] == "man-hinh-may-tinh":
+            product = Screen(**Scraper.__parse_common_info(data))
+            path = os.path.join(
+                Scraper.saving_dir,
+                f"{Scraper.__retailer.lower()}_screens_{datetime.now().strftime("%Y-%m-%d")}.csv",
+            )
+            if not Scraper.__saving_paths.get(path):
+                Scraper.__saving_paths[path] = 0
 
         # update results
         async with Scraper.__lock:
@@ -201,18 +231,15 @@ class Scraper:
             Scraper.__queue.discard(url)
             Scraper.result.append(product.info())
 
-            if Scraper.saving_path:
-                # remove duplicate files in a same date
-                if os.path.exists(Scraper.saving_path):
-                    if not Scraper.__is_removed and os.path.getsize(
-                        Scraper.saving_path
-                    ):
-                        os.remove(Scraper.saving_path)
-                        Scraper.__is_removed = True
+            if Scraper.saving_dir:
+                if os.path.exists(path):  # remove duplicate files in a same date
+                    if Scraper.__saving_paths[path] == 0 and os.path.getsize(path):
+                        os.remove(path)
+                        Scraper.__saving_paths.update({path: 1})  # update file status
                 else:
-                    Scraper.__is_removed = True
+                    Scraper.__saving_paths.update({path: 1})
 
-                dict_to_csv(product.info(), Scraper.saving_path)
+                dict_to_csv(product.info(), path)
 
     @classmethod
     async def execute(
@@ -281,7 +308,7 @@ class Scraper:
             while cls.__queue:
                 in_use = list(cls.__queue)[:chunksize]
                 tasks = [
-                    asyncio.create_task(cls.__parse_data(i, client, semaphore))
+                    asyncio.create_task(cls.__scrape(i, client, semaphore))
                     for i in in_use
                 ]
 
@@ -314,8 +341,8 @@ class Scraper:
 
         print(f"Scraper for {Scraper.__retailer} reset.")
 
-        if cls.saving_path:
-            cls.saving_path = None
+        if cls.saving_dir:
+            cls.saving_dir = None
 
         cls.__retailer = None
         cls.__queue.clear()

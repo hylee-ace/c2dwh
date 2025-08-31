@@ -48,11 +48,11 @@ def scraping_work(
 
     if upload_to_s3:
         bucket = "crawling-to-datalake"
-        filename = os.path.basename(scraper.saving_path)
+        filename = os.path.basename(scraper.saving_dir)
         key = f"scraped/{filename}"
 
         print(f"Start uploading {filename} to {bucket}...")
-        s3_file_uploader(scraper.saving_path, bucket=bucket, key=key)
+        s3_file_uploader(scraper.saving_dir, bucket=bucket, key=key)
         print(f"Uploading {filename} successfully.")
 
     scraper.reset()
@@ -65,11 +65,11 @@ def scraping_work(
 def main():
     # crawling_work(upload_to_s3=True)
     # scraping_work()
+    t = "<a href='https://www.thegioididong.com/hoi-dap/card-do-hoa-tich-hop-la-gi-950047' target='_blank'>Card tích hợp</a> - <a href='https://www.thegioididong.com/hoi-dap/tim-hieu-ve-card-do-hoa-tich-hop-intel-iris-xe-graphics-1305192' target='_blank'>Intel Iris Xe Graphics</a>"
 
-    t = "asdfd sdafdsa fsd nang 572g (asfs) or nang 34.5g dsaf."
-    found = re.match(r"asd", t)
+    found = re.findall(r"<a.*>.*</a>", t)
 
-    print(found.span())
+    print(found)
 
 
 if __name__ == "__main__":

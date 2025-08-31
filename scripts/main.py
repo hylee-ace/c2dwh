@@ -1,4 +1,4 @@
-import asyncio, multiprocessing, random, time, os
+import asyncio, os, re
 from webcrawler import Crawler, Scraper
 from utils import runtime, csv_reader, s3_file_uploader
 
@@ -24,8 +24,8 @@ def crawling_work(upload_to_s3: bool = False):
     asyncio.run(
         crawler.execute(
             timeout=20.0,
-            chunksize=10,
-            semaphore=asyncio.Semaphore(10),
+            chunksize=12,
+            semaphore=asyncio.Semaphore(12),
         )
     )
 
@@ -33,22 +33,16 @@ def crawling_work(upload_to_s3: bool = False):
 
 
 def scraping_work(
-    urls_source: str,
-    target: str,
-    chunksize: int,
-    sema: int,
-    delay: float = None,
     upload_to_s3: bool = False,
 ):
-    urls = [i["url"] for i in csv_reader(urls_source)]
-    scraper = Scraper(urls, target=target, save_in="./data/scraped")
+    urls = [i["url"] for i in csv_reader("./data/crawled/thegioididong_urls.csv")]
+    scraper = Scraper(urls, save_in="./data/scraped")
 
     asyncio.run(
         scraper.execute(
             timeout=20.0,
-            chunksize=chunksize,
-            semaphore=asyncio.Semaphore(sema),
-            delay=delay,
+            chunksize=12,
+            semaphore=asyncio.Semaphore(12),
         )
     )
 
@@ -67,10 +61,15 @@ def scraping_work(
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-@runtime
+# @runtime
 def main():
-    crawling_work(upload_to_s3=True)
-    # scraping_process(upload_to_s3=True)
+    # crawling_work(upload_to_s3=True)
+    # scraping_work()
+
+    t = "asdfd sdafdsa fsd nang 572g (asfs) or nang 34.5g dsaf."
+    found = re.match(r"asd", t)
+
+    print(found.span())
 
 
 if __name__ == "__main__":

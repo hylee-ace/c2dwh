@@ -16,7 +16,7 @@ class Product:
 
 
 @dataclass
-class Smartphone(Product):
+class Phone(Product):
     chipset: str | None = None
     ram: str | None = None
     storage: str | None = None
@@ -57,7 +57,7 @@ class Laptop(Product):
     cpu_speed: str | None = None
     gpu: str | None = None
     ram: str | None = None
-    ram_tech: str | None = None
+    ram_type: str | None = None
     storage: str | None = None
     scr_size: str | None = None
     scr_tech: str | None = None
@@ -77,7 +77,7 @@ class Laptop(Product):
             "cpu_speed": self.cpu_speed,
             "gpu": self.gpu,
             "ram": self.ram,
-            "ram_tech": self.ram_tech,
+            "ram_type": self.ram_type,
             "storage": self.storage,
             "screen_size": self.scr_size,
             "screen_tech": self.scr_tech,
@@ -134,7 +134,7 @@ class Tablet(Product):
 
 
 @dataclass
-class Smartwatch(Product):
+class Watch(Product):
     chipset: str | None = None
     storage: str | None = None
     scr_size: str | None = None

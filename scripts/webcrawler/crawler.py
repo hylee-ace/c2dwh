@@ -16,7 +16,7 @@ class Crawler:
     search: str
         XPath expression used to locate target links in HTML pages.
     save_in: str, optional
-        Directory for saved output (default: **None**).
+        Directory for saved output, the output file could be used for crawling-work history check in future (default: **None**).
     upload_to_s3: bool, optional
         For uploading result file to AWS S3 bucket (default: **False**).
     s3_attrs: dict, optional
@@ -44,8 +44,8 @@ class Crawler:
         s3_attrs: dict | None = None,
     ):
         Crawler.base_url = base_url
-        Crawler.__queue.add(base_url)
         Crawler.search = search
+        Crawler.__queue.add(base_url)
 
         if save_in:
             Crawler.saving_path = os.path.join(
@@ -62,12 +62,16 @@ class Crawler:
             Crawler.__history_check()
 
         if upload_to_s3:
+            if not save_in:
+                print(
+                    "Cannot locate output file for uploading since 'save_in' is missing."
+                )
+                exit(1)
             if not s3_attrs:  # not provide s3 attributes
                 print(
                     "S3 attributes such as client (optional), bucket and obj_prefix are required."
                 )
                 exit(1)
-
             if not all(
                 [
                     True if i in ["client", "bucket", "obj_prefix"] else False
@@ -323,8 +327,6 @@ class Crawler:
         Reset crawler after use.
         """
 
-        print(f"Crawler for {urlparse(cls.base_url).hostname} reset.")
-
         if cls.saving_path:
             cls.saving_path = None
 
@@ -334,3 +336,5 @@ class Crawler:
         cls.__queue.clear()
         cls.__crawled.clear()
         cls.__history.clear()
+
+        print(f"Crawler for {urlparse(cls.base_url).hostname} reset.")

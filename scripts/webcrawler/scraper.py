@@ -1,7 +1,7 @@
 import httpx, json, asyncio, os, re
 from .crawler import Crawler
-from .models import Product, Smartwatch, Smartphone, Laptop, Screen, Tablet, Earphone
-from utils import colorized, dict_to_csv
+from .models import Product, Watch, Phone, Laptop, Screen, Tablet, Earphone
+from utils import colorized, dict_to_csv, s3_file_uploader
 from py_mini_racer import MiniRacer
 from urllib.parse import urlparse
 from datetime import datetime
@@ -27,9 +27,18 @@ class Scraper:
     __queue = set()
     __scraped = set()
     result = list()
+    upload_to_s3 = False
+    s3_attrs = dict()
     __lock = asyncio.Lock()
 
-    def __init__(self, urls: list[str], *, save_in: str = None):
+    def __init__(
+        self,
+        urls: list[str],
+        *,
+        save_in: str = None,
+        upload_to_s3: bool = False,
+        s3_attrs: dict | None = None,
+    ):
         Scraper.__queue.update(urls)
         Scraper.__retailer = "".join(
             [
@@ -41,10 +50,29 @@ class Scraper:
 
         if save_in:
             Scraper.saving_dir = save_in
-            # Scraper.saving_dir = os.path.join(
-            #     save_in,
-            #     f"{retailer}_products_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            # )
+
+        if upload_to_s3:
+            if not save_in:
+                print(
+                    "Cannot locate output file for uploading since 'save_in' is missing."
+                )
+                exit(1)
+            if not s3_attrs:  # not provide s3 attributes
+                print(
+                    "S3 attributes such as client (optional), bucket and obj_prefix are required."
+                )
+                exit(1)
+            if not all(
+                [
+                    True if i in ["client", "bucket", "obj_prefix"] else False
+                    for i in s3_attrs.keys()
+                ]
+            ):  # giving invalid attrs
+                print("Invalid S3 attributes.")
+                exit(1)
+
+            Scraper.upload_to_s3 = upload_to_s3
+            Scraper.s3_attrs = s3_attrs
 
     @staticmethod
     async def nuxt_to_data(
@@ -124,9 +152,9 @@ class Scraper:
                 gam = float(g_vals[0]) if g_vals else None  # actual weight value in gam
 
                 if prd.url.split("/")[3] == "dtdd":
-                    prd.category = "Smartphone" if gam and gam > 135.0 else "Phone"
+                    prd.category = "Smartphone" if gam and gam >= 135.0 else "Phone"
                 elif prd.url.split("/")[3] == "dong-ho-thong-minh":
-                    prd.category = "Smartwatch" if gam and gam > 30.0 else "Smartband"
+                    prd.category = "Smartwatch" if gam and gam >= 30.0 else "Smartband"
                 else:
                     prd.category = (
                         "Headphone"
@@ -146,8 +174,229 @@ class Scraper:
             "release_date": prd.release_date,
         }
 
-    def __parse_specs_info(data: dict):
-        pass
+    def __parse_specs_info(data: dict, type: str):
+        def cpu():  # for laptop, phone, watch, tablet
+            cpu_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Công nghệ CPU", "CPU", "Chip xử lý (CPU)"]
+            ]
+            return re.sub(r"</?a.*?>", "", cpu_value[0]).strip() if cpu_value else None
+
+        def cpuspeed():  # for laptop, tablet
+            cpuspd_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] == "Tốc độ CPU"
+            ]
+            return cpuspd_value[0] if cpuspd_value else None
+
+        def gpu(device: str):  # for laptop, tablet
+            gpu_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Card màn hình", "Chip đồ hoạ (GPU)"]
+            ]
+            if device == "laptop":
+                return (
+                    re.sub(r"</?a.*?>", "", gpu_value[0]).strip() if gpu_value else None
+                )
+            return gpu_value[0] if gpu_value else None
+
+        def ram():  # for laptop, phone, tablet, watch
+            ram_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] == "RAM"
+            ]
+            return ram_value[0] if ram_value else None
+
+        def ramtype():  # for laptop
+            ramtype_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Loại RAM", "Tốc độ Bus RAM"]
+            ]
+            return " ".join(ramtype_value) if ramtype_value else None
+
+        def disk():  # for laptop, phone, tablet, watch
+            disk_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Ổ cứng", "Dung lượng lưu trữ", "Bộ nhớ trong"]
+            ]
+            return disk_value[0] if disk_value else None
+
+        def screensize(device: str):  # for laptop, phone, tablet, watch, screen
+            scsize_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Màn hình rộng", "Kích thước màn hình"]
+            ]
+            if device in ["phone", "tablet"]:
+                return (
+                    re.findall(r'\d\.?\d*\s?"', scsize_value[0])[0]
+                    if scsize_value and re.findall(r'\d\.?\d*\s?"', scsize_value[0])
+                    else None
+                )
+            return scsize_value[0] if scsize_value else None
+
+        def screentech():  # for laptop, phone, tablet, watch, screen
+            sctech_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Công nghệ màn hình", "Tấm nền"]
+            ]
+            return sctech_value[0] if sctech_value else None
+
+        def screenres():  # for laptop, phone, tablet, screen
+            scres_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Độ phân giải màn hình", "Độ phân giải"]
+            ]
+            return scres_value[0] if scres_value else None
+
+        def screenfreq(device: str):  # for laptop, phone, tablet, screen
+            scfreq_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Màn hình rộng", "Tần số quét"]
+            ]
+            if device in ["phone", "tablet"]:
+                return (
+                    re.findall(r">?\s*(\d+\s*Hz)\s*<?", scfreq_value[0])[0]
+                    if scfreq_value
+                    and re.findall(r">?\s*(\d+\s*Hz)\s*<?", scfreq_value[0])
+                    else None
+                )
+
+            return scfreq_value[0] if scfreq_value else None
+
+        def optsys():  # for laptop, phone, tablet, watch
+            os_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] == "Hệ điều hành"
+            ]
+            return os_value[0] if os_value else None
+
+        def battery():  # for laptop, phone, tablet, watch, earphone
+            battery_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"]
+                in ["Thông tin Pin", "Dung lượng pin", "Thời lượng pin tai nghe"]
+            ]
+            return battery_value[0] if battery_value else None
+
+        def case_battery():  # for earphone
+            casebtr_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] == "Thời lượng pin hộp sạc"
+            ]
+            return casebtr_value[0] if casebtr_value else None
+
+        def connectivity():  # for watch, earphone
+            cnt_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] in ["Kết nối", "Công nghệ kết nối"]
+            ]
+            return cnt_value[0] if cnt_value else None
+
+        def control():  # for earphone
+            ctr_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] == "Điều khiển"
+            ]
+            return ctr_value[0] if ctr_value else None
+
+        def powercsp():  # for screen
+            pwcsp_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] == "Công suất tiêu thụ điện"
+            ]
+            return pwcsp_value[0] if pwcsp_value else None
+
+        def ports():  # for screen
+            ports_value = [
+                i["value"].strip()
+                for i in data["additionalProperty"]
+                if i["name"] == "Cổng kết nối"
+            ]
+            return ports_value[0] if ports_value else None
+
+        if type == "phone":
+            return {
+                "chipset": cpu(),
+                "ram": ram(),
+                "storage": disk(),
+                "scr_size": screensize("phone"),
+                "scr_tech": screentech(),
+                "scr_res": screenres(),
+                "scr_freq": screenfreq("phone"),
+                "os": optsys(),
+                "battery": battery(),
+            }
+        elif type == "laptop":
+            return {
+                "cpu": cpu(),
+                "cpu_speed": cpuspeed(),
+                "gpu": gpu("laptop"),
+                "ram": ram(),
+                "ram_type": ramtype(),
+                "storage": disk(),
+                "scr_size": screensize("laptop"),
+                "scr_tech": screentech(),
+                "scr_res": screenres(),
+                "scr_freq": screenfreq("laptop"),
+                "os": optsys(),
+                "battery": battery(),
+            }
+        elif type == "tablet":
+            return {
+                "chipset": cpu(),
+                "chipset_speed": cpuspeed(),
+                "gpu": gpu("tablet"),
+                "ram": ram(),
+                "storage": disk(),
+                "scr_size": screensize("tablet"),
+                "scr_tech": screentech(),
+                "scr_res": screenres(),
+                "scr_freq": screenfreq("tablet"),
+                "os": optsys(),
+                "battery": battery(),
+            }
+        elif type == "watch":
+            return {
+                "chipset": cpu(),
+                "storage": disk(),
+                "scr_size": screensize("watch"),
+                "scr_tech": screentech(),
+                "os": optsys(),
+                "connectivity": connectivity(),
+                "battery": battery(),
+            }
+        elif type == "earphone":
+            return {
+                "connectivity": connectivity(),
+                "battery": battery(),
+                "case_battery": case_battery(),
+                "control": control(),
+            }
+        else:
+            return {
+                "scr_size": screensize("screen"),
+                "scr_tech": screentech(),
+                "scr_res": screenres(),
+                "scr_freq": screenfreq("screen"),
+                "ports": ports(),
+                "power_csp": powercsp(),
+            }
 
     async def __scrape(
         url: str,
@@ -177,15 +426,21 @@ class Scraper:
 
         # parse product info
         if url.split("/")[3] == "dtdd":
-            product = Smartphone(**Scraper.__parse_common_info(data))
+            product = Phone(
+                **Scraper.__parse_common_info(data),
+                **Scraper.__parse_specs_info(data, "phone"),
+            )
             path = os.path.join(
                 Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_smartphones_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                f"{Scraper.__retailer.lower()}_phones_{datetime.now().strftime("%Y-%m-%d")}.csv",
             )
             if not Scraper.__saving_paths.get(path):
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "laptop":
-            product = Laptop(**Scraper.__parse_common_info(data))
+            product = Laptop(
+                **Scraper.__parse_common_info(data),
+                **Scraper.__parse_specs_info(data, "laptop"),
+            )
             path = os.path.join(
                 Scraper.saving_dir,
                 f"{Scraper.__retailer.lower()}_laptops_{datetime.now().strftime("%Y-%m-%d")}.csv",
@@ -193,7 +448,10 @@ class Scraper:
             if not Scraper.__saving_paths.get(path):
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "may-tinh-bang":
-            product = Tablet(**Scraper.__parse_common_info(data))
+            product = Tablet(
+                **Scraper.__parse_common_info(data),
+                **Scraper.__parse_specs_info(data, "tablet"),
+            )
             path = os.path.join(
                 Scraper.saving_dir,
                 f"{Scraper.__retailer.lower()}_tablets_{datetime.now().strftime("%Y-%m-%d")}.csv",
@@ -201,15 +459,21 @@ class Scraper:
             if not Scraper.__saving_paths.get(path):
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "dong-ho-thong-minh":
-            product = Smartwatch(**Scraper.__parse_common_info(data))
+            product = Watch(
+                **Scraper.__parse_common_info(data),
+                **Scraper.__parse_specs_info(data, "watch"),
+            )
             path = os.path.join(
                 Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_smartwatches_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                f"{Scraper.__retailer.lower()}_watches_{datetime.now().strftime("%Y-%m-%d")}.csv",
             )
             if not Scraper.__saving_paths.get(path):
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "tai-nghe":
-            product = Earphone(**Scraper.__parse_common_info(data))
+            product = Earphone(
+                **Scraper.__parse_common_info(data),
+                **Scraper.__parse_specs_info(data, "earphone"),
+            )
             path = os.path.join(
                 Scraper.saving_dir,
                 f"{Scraper.__retailer.lower()}_earphones_{datetime.now().strftime("%Y-%m-%d")}.csv",
@@ -217,7 +481,10 @@ class Scraper:
             if not Scraper.__saving_paths.get(path):
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "man-hinh-may-tinh":
-            product = Screen(**Scraper.__parse_common_info(data))
+            product = Screen(
+                **Scraper.__parse_common_info(data),
+                **Scraper.__parse_specs_info(data, "screen"),
+            )
             path = os.path.join(
                 Scraper.saving_dir,
                 f"{Scraper.__retailer.lower()}_screens_{datetime.now().strftime("%Y-%m-%d")}.csv",
@@ -333,13 +600,37 @@ class Scraper:
             sep=" | ",
         )
 
+        # upload to s3 bucket
+        if cls.upload_to_s3 and cls.s3_attrs:
+            bucket = cls.s3_attrs["bucket"]
+            files = []
+
+            # uploading work
+            def upload(file: str, bucket: str, key: str):
+                fname = os.path.basename(file)
+                print(f"Start uploading {fname} to {bucket}...")
+                s3_file_uploader(
+                    file, client=cls.s3_attrs.get("client"), bucket=bucket, key=key
+                )
+                print(f"Uploading {fname} successfully.")
+
+            for i in Scraper.__saving_paths:
+                filename = os.path.basename(i)
+                key = f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}{filename}"
+                date = datetime.fromisoformat(
+                    filename.removesuffix(".csv").split("_")[-1]
+                )
+                if date.date() == datetime.now().date():  # check valid date
+                    files.append({"file": i, "bucket": bucket, "key": key})
+
+            tasks = [asyncio.to_thread(upload, **i) for i in files]
+            await asyncio.gather(*tasks)
+
     @classmethod
     def reset(cls):
         """
         Reset scraper after use.
         """
-
-        print(f"Scraper for {Scraper.__retailer} reset.")
 
         if cls.saving_dir:
             cls.saving_dir = None
@@ -348,3 +639,5 @@ class Scraper:
         cls.__queue.clear()
         cls.__scraped.clear()
         cls.result.clear()
+
+        print(f"Scraper for {Scraper.__retailer} reset.")

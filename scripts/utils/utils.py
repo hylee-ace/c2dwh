@@ -168,7 +168,6 @@ def timetext(second: int | float):
     h = int(second / 3600)
     m = int(second % 3600 / 60)
     s = second % 3600 % 60
-
     text = f"{h if h>0 else ''}{'h'if h>0 else ''}{'0' if h>0 and m<10 else ''}{m if m>0 else ''}{'m'if m>0 else ''}{s:.2f}s"
 
     return text

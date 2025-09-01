@@ -1,6 +1,6 @@
-import asyncio, os, re
+import asyncio
 from webcrawler import Crawler, Scraper
-from utils import runtime, csv_reader, s3_file_uploader
+from utils import runtime, csv_reader
 
 
 def crawling_work(upload_to_s3: bool = False):
@@ -24,11 +24,10 @@ def crawling_work(upload_to_s3: bool = False):
     asyncio.run(
         crawler.execute(
             timeout=20.0,
-            chunksize=12,
-            semaphore=asyncio.Semaphore(12),
+            chunksize=10,
+            semaphore=asyncio.Semaphore(10),
         )
     )
-
     crawler.reset()
 
 
@@ -36,40 +35,30 @@ def scraping_work(
     upload_to_s3: bool = False,
 ):
     urls = [i["url"] for i in csv_reader("./data/crawled/thegioididong_urls.csv")]
-    scraper = Scraper(urls, save_in="./data/scraped")
+    scraper = Scraper(
+        urls,
+        save_in="./data/scraped",
+        upload_to_s3=upload_to_s3,
+        s3_attrs={"bucket": "crawling-to-datalake", "obj_prefix": "scraped/"},
+    )
 
     asyncio.run(
         scraper.execute(
             timeout=20.0,
-            chunksize=12,
-            semaphore=asyncio.Semaphore(12),
+            chunksize=10,
+            semaphore=asyncio.Semaphore(10),
         )
     )
-
-    if upload_to_s3:
-        bucket = "crawling-to-datalake"
-        filename = os.path.basename(scraper.saving_dir)
-        key = f"scraped/{filename}"
-
-        print(f"Start uploading {filename} to {bucket}...")
-        s3_file_uploader(scraper.saving_dir, bucket=bucket, key=key)
-        print(f"Uploading {filename} successfully.")
-
     scraper.reset()
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-# @runtime
+@runtime
 def main():
     # crawling_work(upload_to_s3=True)
-    # scraping_work()
-    t = "<a href='https://www.thegioididong.com/hoi-dap/card-do-hoa-tich-hop-la-gi-950047' target='_blank'>Card tích hợp</a> - <a href='https://www.thegioididong.com/hoi-dap/tim-hieu-ve-card-do-hoa-tich-hop-intel-iris-xe-graphics-1305192' target='_blank'>Intel Iris Xe Graphics</a>"
-
-    found = re.findall(r"<a.*>.*</a>", t)
-
-    print(found)
+    scraping_work(upload_to_s3=True)
 
 
 if __name__ == "__main__":

@@ -24,8 +24,8 @@ def crawling_work(upload_to_s3: bool = False):
     asyncio.run(
         crawler.execute(
             timeout=20.0,
-            chunksize=10,
-            semaphore=asyncio.Semaphore(10),
+            chunksize=11,
+            semaphore=asyncio.Semaphore(11),
         )
     )
     crawler.reset()
@@ -45,8 +45,8 @@ def scraping_work(
     asyncio.run(
         scraper.execute(
             timeout=20.0,
-            chunksize=10,
-            semaphore=asyncio.Semaphore(10),
+            chunksize=11,
+            semaphore=asyncio.Semaphore(11),
         )
     )
     scraper.reset()
@@ -58,7 +58,7 @@ def scraping_work(
 @runtime
 def main():
     # crawling_work(upload_to_s3=True)
-    scraping_work(upload_to_s3=True)
+    scraping_work()
 
 
 if __name__ == "__main__":

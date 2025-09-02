@@ -1,10 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime
 
 
 @dataclass
 class Product:
-    product_id: int
+    sku: int
     name: str
     price: int | None = None
     brand: str | None = None
@@ -17,7 +17,7 @@ class Product:
 
 @dataclass
 class Phone(Product):
-    chipset: str | None = None
+    cpu: str | None = None
     ram: str | None = None
     storage: str | None = None
     scr_size: str | None = None
@@ -29,12 +29,12 @@ class Phone(Product):
 
     def info(self):
         return {
-            "id": self.product_id,
+            "sku": self.sku,
             "name": self.name,
             "price": self.price,
             "brand": self.brand,
             "category": self.category,
-            "chipset": self.chipset,
+            "cpu": self.cpu,
             "ram": self.ram,
             "storage": self.storage,
             "screen_size": self.scr_size,
@@ -68,7 +68,7 @@ class Laptop(Product):
 
     def info(self):
         return {
-            "id": self.product_id,
+            "sku": self.sku,
             "name": self.name,
             "price": self.price,
             "brand": self.brand,
@@ -95,8 +95,8 @@ class Laptop(Product):
 
 @dataclass
 class Tablet(Product):
-    chipset: str | None = None
-    chipset_speed: str | None = None
+    cpu: str | None = None
+    cpu_speed: str | None = None
     gpu: str | None = None
     ram: str | None = None
     storage: str | None = None
@@ -109,13 +109,13 @@ class Tablet(Product):
 
     def info(self):
         return {
-            "id": self.product_id,
+            "sku": self.sku,
             "name": self.name,
             "price": self.price,
             "brand": self.brand,
             "category": self.category,
-            "chipset": self.chipset,
-            "chipset_speed": self.chipset_speed,
+            "cpu": self.cpu,
+            "cpu_speed": self.cpu_speed,
             "gpu": self.gpu,
             "ram": self.ram,
             "storage": self.storage,
@@ -145,7 +145,7 @@ class Watch(Product):
 
     def info(self):
         return {
-            "id": self.product_id,
+            "sku": self.sku,
             "name": self.name,
             "price": self.price,
             "brand": self.brand,
@@ -174,7 +174,7 @@ class Earphone(Product):
 
     def info(self):
         return {
-            "id": self.product_id,
+            "sku": self.sku,
             "name": self.name,
             "price": self.price,
             "brand": self.brand,
@@ -202,7 +202,7 @@ class Screen(Product):
 
     def info(self):
         return {
-            "id": self.product_id,
+            "sku": self.sku,
             "name": self.name,
             "price": self.price,
             "brand": self.brand,

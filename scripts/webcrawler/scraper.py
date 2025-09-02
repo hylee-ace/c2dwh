@@ -108,7 +108,7 @@ class Scraper:
 
     def __parse_common_info(data: dict):
         prd = Product(
-            product_id=data["sku"].strip(),
+            sku=data["sku"].strip(),
             name=data["name"].strip(),
             price=int(data["offers"]["price"]),
             brand=data["brand"]["name"][0].strip(),
@@ -129,8 +129,8 @@ class Scraper:
         prd.release_date = released_value[0] if released_value else None
 
         # check device type
-        weight_value = [
-            i["value"].split(" - ")[-1].strip()
+        dim_value = [
+            i["value"]
             for i in data["additionalProperty"]
             if i["name"] == "Kích thước, khối lượng" or i["name"] == "Khối lượng"
         ]
@@ -146,15 +146,19 @@ class Scraper:
             prd.category = "Tablet"
         elif prd.url.split("/")[3] == "man-hinh-may-tinh":
             prd.category = "Screen"
-        else:  # classify by weight
-            if weight_value:
-                g_vals = re.findall(r"(\d+\.?\d*)\s?(?:g|\()", weight_value[0])
+        else:  # classify by weight and width
+            if dim_value:
+                g_vals = re.findall(r"(\d+\.?\d*)\s?(?:g|\()", dim_value[0])
                 gam = float(g_vals[0]) if g_vals else None  # actual weight value in gam
 
                 if prd.url.split("/")[3] == "dtdd":
                     prd.category = "Smartphone" if gam and gam >= 135.0 else "Phone"
                 elif prd.url.split("/")[3] == "dong-ho-thong-minh":
-                    prd.category = "Smartwatch" if gam and gam >= 30.0 else "Smartband"
+                    mm_vals = re.findall(r"Ngang\s?(\d+\.?\d*)\s?mm", dim_value[0])
+                    mm = (
+                        float(mm_vals[0]) if mm_vals else None
+                    )  # actual width value in mm
+                    prd.category = "Smartwatch" if mm and mm > 33.5 else "Smartband"
                 else:
                     prd.category = (
                         "Headphone"
@@ -163,7 +167,7 @@ class Scraper:
                     )
 
         return {
-            "product_id": prd.product_id,
+            "sku": prd.sku,
             "name": prd.name,
             "price": prd.price,
             "brand": prd.brand,

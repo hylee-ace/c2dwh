@@ -262,7 +262,7 @@ class Crawler:
 
                 print(
                     f"From: {cls.base_url}",
-                    f"Pending {len(cls.__queue)}",
+                    f"Pending: {len(cls.__queue)}",
                     f"Crawled: {len(cls.__crawled)}",
                     f"Valid: {len(cls.result)}",
                     sep=" | ",

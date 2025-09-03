@@ -1,6 +1,6 @@
 import httpx, json, asyncio, os, re
 from .crawler import Crawler
-from .models import Product, Watch, Phone, Laptop, Screen, Tablet, Earphone
+from .models import ProductInfo, Watch, Phone, Laptop, Screen, Tablet, Earphone
 from utils import colorized, dict_to_csv, s3_file_uploader
 from py_mini_racer import MiniRacer
 from urllib.parse import urlparse
@@ -107,7 +107,7 @@ class Scraper:
         return json.loads(data)
 
     def __parse_common_info(data: dict):
-        prd = Product(
+        prd = ProductInfo(
             sku=data["sku"].strip(),
             name=data["name"].strip(),
             price=int(data["offers"]["price"]),

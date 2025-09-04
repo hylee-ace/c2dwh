@@ -1,10 +1,11 @@
 import httpx, json, asyncio, os, re
 from .crawler import Crawler
-from .models import ProductInfo, Watch, Phone, Laptop, Screen, Tablet, Earphone
+from .models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphone, Screen
 from utils import colorized, dict_to_csv, s3_file_uploader
 from py_mini_racer import MiniRacer
 from urllib.parse import urlparse
 from datetime import datetime
+from dataclasses import asdict
 
 
 class Scraper:
@@ -126,7 +127,7 @@ class Scraper:
             or i["name"] == "Thời gian ra mắt"
             or i["name"] == "Năm ra mắt"
         ]
-        prd.release_date = released_value[0] if released_value else None
+        prd.release_date = released_value[0].strip() if released_value else None
 
         # check device type
         dim_value = [
@@ -166,273 +167,429 @@ class Scraper:
                         else "Earphone" if jack_value else "Earbuds"
                     )
 
-        return {
-            "sku": prd.sku,
-            "name": prd.name,
-            "price": prd.price,
-            "brand": prd.brand,
-            "category": prd.category,
-            "rating": prd.rating,
-            "reviews_count": prd.reviews_count,
-            "url": prd.url,
-            "release_date": prd.release_date,
-        }
+        return asdict(prd)
 
-    def __parse_specs_info(data: dict, type: str):
-        def cpu():  # for laptop, phone, watch, tablet
-            cpu_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Công nghệ CPU", "CPU", "Chip xử lý (CPU)"]
+    def __parse_specs_info(data: dict, device: str):
+        def cpu():
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Công nghệ CPU", "Chip xử lý (CPU)", "CPU"]
             ]
-            return re.sub(r"</?a.*?>", "", cpu_value[0]).strip() if cpu_value else None
+            return value[0] if value else None
 
-        def cpuspeed():  # for laptop, tablet
-            cpuspd_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Tốc độ CPU"
-            ]
-            return cpuspd_value[0] if cpuspd_value else None
+        def cpu_cores():
+            value = [j.strip() for i, j in data if i == "Số nhân"]
+            return value[0] if value else None
 
-        def gpu(device: str):  # for laptop, tablet
-            gpu_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Card màn hình", "Chip đồ hoạ (GPU)"]
+        def cpu_threads():
+            value = [j.strip() for i, j in data if i == "Số luồng"]
+            return value[0] if value else None
+
+        def cpu_speed():
+            value = [j.strip() for i, j in data if i == "Tốc độ CPU"]
+            return value[0] if value else None
+
+        def gpu():
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Chip đồ hoạ (GPU)", "Chip đồ họa (GPU)", "Card màn hình"]
             ]
+            return value[0] if value else None
+
+        def ram():
+            value = [j.strip() for i, j in data if i == "RAM"]
+            return value[0] if value else None
+
+        def max_ram():
+            value = [j.strip() for i, j in data if i == "Hỗ trợ RAM tối đa"]
+            return value[0] if value else None
+
+        def ram_type():
+            value = [j.strip() for i, j in data if i == "Loại RAM"]
+            return value[0] if value else None
+
+        def ram_bus():
+            value = [j.strip() for i, j in data if i == "Tốc độ Bus RAM"]
+            return value[0] if value else None
+
+        def storage():
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Ổ cứng", "Dung lượng lưu trữ", "Bộ nhớ trong"]
+            ]
+            return value[0] if value else None
+
+        def webcam():
+            value = [j.strip() for i, j in data if i == "Webcam"]
+            return value[0] if value else None
+
+        def rearcam_specs():
+            if device == "tablet":
+                value = [j.strip() for i, j in data if i == "Độ phân giải"]
+                return value[1] if value else None
+            else:
+                value = [j.strip() for i, j in data if i == "Độ phân giải camera sau"]
+                return value[0] if value else None
+
+        def frontcam_specs():
+            if device == "tablet":
+                value = [j.strip() for i, j in data if i == "Độ phân giải"]
+                return value[-1] if value else None
+            value = [j.strip() for i, j in data if i == "Độ phân giải camera trước"]
+            return value[0] if value else None
+
+        def screen_tech():
+            value = [j.strip() for i, j in data if i == "Công nghệ màn hình"]
+            return value[0] if value else None
+
+        def screen_type():
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Chất liệu mặt", "Mặt kính cảm ứng", "Loại màn hình"]
+            ]
+            return value[0] if value else None
+
+        def screen_size():
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Kích thước màn hình", "Màn hình rộng"]
+            ]
+            return value[0].split("-")[0].strip() if value else None
+
+        def screen_panel():
+            if device in ["laptop", "screen"]:
+                value = [j.strip() for i, j in data if i == "Tấm nền"]
+                return value[0] if value else None
+            value = [j.strip() for i, j in data if i == "Công nghệ màn hình"]
+            return value[0] if value else None
+
+        def screen_res():
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Độ phân giải", "Độ phân giải màn hình"]
+            ]
+            return value[0] if value else None
+
+        def screen_rate():
+            if device in ["screen", "laptop"]:
+                value = [j.strip() for i, j in data if i == "Tần số quét"]
+                return value[0] if value else None
+            value = [j.strip() for i, j in data if i == "Màn hình rộng"]
+            return re.sub(r".*\s(\d+\.?\d*\s*Hz)", r"\1", value[0]) if value else None
+
+        def screen_nits():
             if device == "laptop":
+                value = [j.strip() for i, j in data if i == "Công nghệ màn hình"]
                 return (
-                    re.sub(r"</?a.*?>", "", gpu_value[0]).strip() if gpu_value else None
-                )
-            return gpu_value[0] if gpu_value else None
-
-        def ram():  # for laptop, phone, tablet, watch
-            ram_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "RAM"
-            ]
-            return ram_value[0] if ram_value else None
-
-        def ramtype():  # for laptop
-            ramtype_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Loại RAM", "Tốc độ Bus RAM"]
-            ]
-            return " ".join(ramtype_value) if ramtype_value else None
-
-        def disk():  # for laptop, phone, tablet, watch
-            disk_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Ổ cứng", "Dung lượng lưu trữ", "Bộ nhớ trong"]
-            ]
-            return disk_value[0] if disk_value else None
-
-        def screensize(device: str):  # for laptop, phone, tablet, watch, screen
-            scsize_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Màn hình rộng", "Kích thước màn hình"]
-            ]
-            if device in ["phone", "tablet"]:
-                return (
-                    re.findall(r'\d\.?\d*\s?"', scsize_value[0])[0]
-                    if scsize_value and re.findall(r'\d\.?\d*\s?"', scsize_value[0])
+                    re.sub(r".*\s+(\d+\s*nits).*", r"\1", value[0])
+                    if value and re.findall(r"\d+\s?nits", value[0])
                     else None
                 )
-            return scsize_value[0] if scsize_value else None
+            value = [j.strip() for i, j in data if i == "Độ sáng tối đa"]
+            return value[0] if value else None
 
-        def screentech():  # for laptop, phone, tablet, watch, screen
-            sctech_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Công nghệ màn hình", "Tấm nền"]
-            ]
-            return sctech_value[0] if sctech_value else None
+        def os():
+            value = [j.strip() for i, j in data if i == "Hệ điều hành"]
+            return value[0] if value else None
 
-        def screenres():  # for laptop, phone, tablet, screen
-            scres_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Độ phân giải màn hình", "Độ phân giải"]
-            ]
-            return scres_value[0] if scres_value else None
-
-        def screenfreq(device: str):  # for laptop, phone, tablet, screen
-            scfreq_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Màn hình rộng", "Tần số quét"]
-            ]
-            if device in ["phone", "tablet"]:
+        def water_resistant():
+            if device == "earphone":
+                value = [j.strip() for i, j in data if i == "Tiện ích"]
                 return (
-                    re.findall(r">?\s*(\d+\s*Hz)\s*<?", scfreq_value[0])[0]
-                    if scfreq_value
-                    and re.findall(r">?\s*(\d+\s*Hz)\s*<?", scfreq_value[0])
+                    re.sub(r".*(IP\d+).*", r"\1", value[0])
+                    if value and re.findall(r"IP\d+", value[0])
                     else None
                 )
-
-            return scfreq_value[0] if scfreq_value else None
-
-        def optsys():  # for laptop, phone, tablet, watch
-            os_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Hệ điều hành"
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Chống nước / Kháng nước", "Kháng nước, bụi"]
             ]
-            return os_value[0] if os_value else None
+            return value[0] if value else None
 
-        def battery():  # for laptop, phone, tablet, watch, earphone
-            battery_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"]
-                in ["Thông tin Pin", "Dung lượng pin", "Thời lượng pin tai nghe"]
+        def battery():
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Thông tin Pin", "Dung lượng pin", "Thời lượng pin tai nghe"]
             ]
-            return battery_value[0] if battery_value else None
+            return value[0] if value else None
 
-        def case_battery():  # for earphone
-            casebtr_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Thời lượng pin hộp sạc"
+        def charger():
+            value = [j.strip() for i, j in data if i == "Hỗ trợ sạc tối đa"]
+            return value[0] if value else None
+
+        def weight():
+            if device in ["laptop", "screen"]:
+                value = [
+                    j.strip()
+                    for i, j in data
+                    if i in ["Khối lượng có chân đế", "Kích thước"]
+                ]
+                return value[0].split("-")[-1].strip() if value else None
+            value = [
+                j.strip()
+                for i, j in data
+                if i in ["Kích thước, khối lượng", "Khối lượng"]
             ]
-            return casebtr_value[0] if casebtr_value else None
+            return (
+                re.sub(r"(.*Nặng\s+)?(\d+\.?\d*)\s*[g(].*", r"\2", value[0]) + " g"
+                if value
+                else None
+            )
 
-        def connectivity():  # for watch, earphone
-            cnt_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] in ["Kết nối", "Công nghệ kết nối"]
+        def material():
+            value = [
+                j.strip() for i, j in data if i in ["Chất liệu khung viền", "Chất liệu"]
             ]
-            return cnt_value[0] if cnt_value else None
+            return value[0] if value else None
 
-        def control():  # for earphone
-            ctr_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Điều khiển"
-            ]
-            return ctr_value[0] if ctr_value else None
-
-        def powercsp():  # for screen
-            pwcsp_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Công suất tiêu thụ điện"
-            ]
-            return pwcsp_value[0] if pwcsp_value else None
-
-        def ports():  # for screen
-            ports_value = [
-                i["value"].strip()
-                for i in data["additionalProperty"]
-                if i["name"] == "Cổng kết nối"
-            ]
-            return ports_value[0] if ports_value else None
-
-        if type == "phone":
-            return {
-                "chipset": cpu(),
-                "ram": ram(),
-                "storage": disk(),
-                "scr_size": screensize("phone"),
-                "scr_tech": screentech(),
-                "scr_res": screenres(),
-                "scr_freq": screenfreq("phone"),
-                "os": optsys(),
-                "battery": battery(),
+        def connectivity():
+            value = {
+                j.strip() if j else ""
+                for i, j in data
+                if i
+                in [
+                    "Wifi",
+                    "Bluetooth",
+                    "Kết nối khác",
+                    "Kết nối không dây",
+                    "Kết nối",
+                    "Công nghệ kết nối",
+                ]
             }
-        elif type == "laptop":
-            return {
-                "cpu": cpu(),
-                "cpu_speed": cpuspeed(),
-                "gpu": gpu("laptop"),
-                "ram": ram(),
-                "ram_type": ramtype(),
-                "storage": disk(),
-                "scr_size": screensize("laptop"),
-                "scr_tech": screentech(),
-                "scr_res": screenres(),
-                "scr_freq": screenfreq("laptop"),
-                "os": optsys(),
-                "battery": battery(),
+            return ", ".join(value) if value else None
+
+        def network():
+            value = [j.strip() for i, j in data if i == "Mạng di động"]
+            return value[0] if value else None
+
+        def ports():
+            value = {
+                j.strip() if j else ""
+                for i, j in data
+                if i
+                in [
+                    "Jack tai nghe",
+                    "Cổng kết nối/sạc",
+                    "Cổng giao tiếp",
+                    "Cổng sạc",
+                    "Jack cắm",
+                    "Cổng kết nối",
+                ]
             }
-        elif type == "tablet":
-            return {
-                "chipset": cpu(),
-                "chipset_speed": cpuspeed(),
-                "gpu": gpu("tablet"),
-                "ram": ram(),
-                "storage": disk(),
-                "scr_size": screensize("tablet"),
-                "scr_tech": screentech(),
-                "scr_res": screenres(),
-                "scr_freq": screenfreq("tablet"),
-                "os": optsys(),
-                "battery": battery(),
-            }
-        elif type == "watch":
-            return {
-                "chipset": cpu(),
-                "storage": disk(),
-                "scr_size": screensize("watch"),
-                "scr_tech": screentech(),
-                "os": optsys(),
-                "connectivity": connectivity(),
-                "battery": battery(),
-            }
-        elif type == "earphone":
-            return {
-                "connectivity": connectivity(),
-                "battery": battery(),
-                "case_battery": case_battery(),
-                "control": control(),
-            }
-        else:
-            return {
-                "scr_size": screensize("screen"),
-                "scr_tech": screentech(),
-                "scr_res": screenres(),
-                "scr_freq": screenfreq("screen"),
-                "ports": ports(),
-                "power_csp": powercsp(),
-            }
+            return ", ".join(value) if value else None
+
+        def sound_tech():
+            value = [j.strip() for i, j in data if i == "Công nghệ âm thanh"]
+            return value[0] if value else None
+
+        def speaker_driver():
+            value = [j.strip() for i, j in data if i == "Công nghệ âm thanh"]
+            return (
+                re.sub(r".*(Driver\s+\d+\s*mm).*", r"\1", value[0])
+                if value and re.findall(r"Driver\s+\d+\s*mm", value[0])
+                else None
+            )
+
+        def compatible():
+            value = [j.strip() for i, j in data if i == "Tương thích"]
+            return value[0] if value else None
+
+        def control():
+            value = [j.strip() for i, j in data if i == "Điều khiển"]
+            return value[0] if value else None
+
+        def case_battery():
+            value = [j.strip() for i, j in data if i == "Thời lượng pin hộp sạc"]
+            return value[0] if value else None
+
+        def power_consumption():
+            value = [j.strip() for i, j in data if i == "Công suất tiêu thụ điện"]
+            return value[0] if value else None
+
+        match device:
+            case "phone":
+                return {
+                    "cpu": cpu(),
+                    "cpu_speed": cpu_speed(),
+                    "gpu": gpu(),
+                    "ram": ram(),
+                    "storage": storage(),
+                    "rearcam_specs": rearcam_specs(),
+                    "frontcam_specs": frontcam_specs(),
+                    "screen_type": screen_type(),
+                    "screen_size": screen_size(),
+                    "screen_panel": screen_panel(),
+                    "screen_res": screen_res(),
+                    "screen_rate": screen_rate(),
+                    "screen_nits": screen_nits(),
+                    "os": os(),
+                    "water_resistant": water_resistant(),
+                    "battery": battery(),
+                    "charger": charger(),
+                    "weight": weight(),
+                    "material": material(),
+                    "connectivity": connectivity(),
+                    "network": network(),
+                    "ports": ports(),
+                }
+            case "tablet":
+                return {
+                    "cpu": cpu(),
+                    "cpu_speed": cpu_speed(),
+                    "gpu": gpu(),
+                    "ram": ram(),
+                    "storage": storage(),
+                    "rearcam_specs": rearcam_specs(),
+                    "frontcam_specs": frontcam_specs(),
+                    "screen_size": screen_size(),
+                    "screen_panel": screen_panel(),
+                    "screen_res": screen_res(),
+                    "screen_rate": screen_rate(),
+                    "os": os(),
+                    "water_resistant": water_resistant(),
+                    "battery": battery(),
+                    "charger": charger(),
+                    "weight": weight(),
+                    "material": material(),
+                    "connectivity": connectivity(),
+                    "network": network(),
+                    "ports": ports(),
+                }
+            case "laptop":
+                return {
+                    "cpu": cpu(),
+                    "cpu_cores": cpu_cores(),
+                    "cpu_threads": cpu_threads(),
+                    "cpu_speed": cpu_speed(),
+                    "gpu": gpu(),
+                    "ram": ram(),
+                    "max_ram": max_ram(),
+                    "ram_type": ram_type(),
+                    "ram_bus": ram_bus(),
+                    "storage": storage(),
+                    "webcam": webcam(),
+                    "screen_panel": screen_panel(),
+                    "screen_size": screen_size(),
+                    "screen_tech": screen_tech(),
+                    "screen_res": screen_res(),
+                    "screen_rate": screen_rate(),
+                    "screen_nits": screen_nits(),
+                    "os": os(),
+                    "battery": battery(),
+                    "weight": weight(),
+                    "material": material(),
+                    "connectivity": connectivity(),
+                    "ports": ports(),
+                }
+            case "watch":
+                return {
+                    "cpu": cpu(),
+                    "storage": storage(),
+                    "screen_type": screen_type(),
+                    "screen_panel": screen_panel(),
+                    "screen_size": screen_size(),
+                    "os": os(),
+                    "water_resistant": water_resistant(),
+                    "connectivity": connectivity(),
+                    "battery": battery(),
+                    "weight": weight(),
+                    "material": material(),
+                }
+            case "earphone":
+                return {
+                    "sound_tech": sound_tech(),
+                    "speaker_driver": speaker_driver(),
+                    "compatible": compatible(),
+                    "control": control(),
+                    "water_resistant": water_resistant(),
+                    "ports": ports(),
+                    "connectivity": connectivity(),
+                    "battery": battery(),
+                    "case_battery": case_battery(),
+                    "weight": weight(),
+                }
+            case "screen":
+                return {
+                    "screen_type": screen_type(),
+                    "screen_panel": screen_panel(),
+                    "screen_size": screen_size(),
+                    "screen_tech": screen_tech(),
+                    "screen_res": screen_res(),
+                    "screen_rate": screen_rate(),
+                    "power_consumption": power_consumption(),
+                    "ports": ports(),
+                    "weight": weight(),
+                }
 
     async def __scrape(
         url: str,
         client: httpx.AsyncClient,
         semaphore: asyncio.Semaphore,
     ):
-        data = None
+        full_data = None  # include some specs info but messy
+        specs_data = []  # full specs info
         product = None
         path = None
+        include = [
+            ("*", "@id='productld'", ""),  # tag, condition, ancestor
+            ("span", "@class='circle'", "/ancestor::li"),
+            ("a", "contains(@class,'tzLink')", "/ancestor::li"),
+            ("span", "@class=''", "/ancestor::li"),
+        ]
 
-        data = await Crawler.async_inspect(
+        fetched = await Crawler.async_inspect(
             url,
-            client=client,
-            xpath='//*[@id="productld"]/text()',
-            semaphore=semaphore,
+            xpath="|".join([f"//{i[0]}[{i[1]}]{i[2]}" for i in include]),
             encoding="utf-8",
+            client=client,
+            semaphore=semaphore,
         )
 
-        # check if url were product page
-        if not data:
+        # check fetched data
+        if not fetched:
             async with Scraper.__lock:
                 Scraper.__scraped.add(url)
                 Scraper.__queue.discard(url)
             return
 
-        data = json.loads(data[0])
+        # prepare data
+        data = [
+            re.sub(r"\s{2,}", ", ", i.text_content().strip())
+            for i in fetched
+            if ":" in i.text_content()
+        ]  # remove noise from fetched json
+        json_content = [i for i in data if re.findall(r"{|}", i)]
+        tags_content = [
+            (
+                i.split(":")[0].strip(),
+                "".join(i.split(":")[1:]).removeprefix(",").strip(),
+            )
+            for i in data
+            if not re.findall(r"{|}", i)
+        ]
+
+        if not json_content or not tags_content:  # if separating failed
+            async with Scraper.__lock:
+                Scraper.__scraped.add(url)
+                Scraper.__queue.discard(url)
+            return
+
+        full_data = json.loads(json_content[0])
+        specs_data.extend(tags_content)
 
         # parse product info
         if url.split("/")[3] == "dtdd":
             product = Phone(
-                **Scraper.__parse_common_info(data),
-                **Scraper.__parse_specs_info(data, "phone"),
+                **Scraper.__parse_common_info(full_data),
+                **Scraper.__parse_specs_info(specs_data, "phone"),
             )
             path = os.path.join(
                 Scraper.saving_dir,
@@ -442,8 +599,8 @@ class Scraper:
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "laptop":
             product = Laptop(
-                **Scraper.__parse_common_info(data),
-                **Scraper.__parse_specs_info(data, "laptop"),
+                **Scraper.__parse_common_info(full_data),
+                **Scraper.__parse_specs_info(specs_data, "laptop"),
             )
             path = os.path.join(
                 Scraper.saving_dir,
@@ -453,8 +610,8 @@ class Scraper:
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "may-tinh-bang":
             product = Tablet(
-                **Scraper.__parse_common_info(data),
-                **Scraper.__parse_specs_info(data, "tablet"),
+                **Scraper.__parse_common_info(full_data),
+                **Scraper.__parse_specs_info(specs_data, "tablet"),
             )
             path = os.path.join(
                 Scraper.saving_dir,
@@ -464,8 +621,8 @@ class Scraper:
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "dong-ho-thong-minh":
             product = Watch(
-                **Scraper.__parse_common_info(data),
-                **Scraper.__parse_specs_info(data, "watch"),
+                **Scraper.__parse_common_info(full_data),
+                **Scraper.__parse_specs_info(specs_data, "watch"),
             )
             path = os.path.join(
                 Scraper.saving_dir,
@@ -475,8 +632,8 @@ class Scraper:
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "tai-nghe":
             product = Earphone(
-                **Scraper.__parse_common_info(data),
-                **Scraper.__parse_specs_info(data, "earphone"),
+                **Scraper.__parse_common_info(full_data),
+                **Scraper.__parse_specs_info(specs_data, "earphone"),
             )
             path = os.path.join(
                 Scraper.saving_dir,
@@ -486,8 +643,8 @@ class Scraper:
                 Scraper.__saving_paths[path] = 0
         elif url.split("/")[3] == "man-hinh-may-tinh":
             product = Screen(
-                **Scraper.__parse_common_info(data),
-                **Scraper.__parse_specs_info(data, "screen"),
+                **Scraper.__parse_common_info(full_data),
+                **Scraper.__parse_specs_info(specs_data, "screen"),
             )
             path = os.path.join(
                 Scraper.saving_dir,
@@ -500,7 +657,7 @@ class Scraper:
         async with Scraper.__lock:
             Scraper.__scraped.add(url)
             Scraper.__queue.discard(url)
-            Scraper.result.append(product.info())
+            Scraper.result.append(asdict(product))
 
             if Scraper.saving_dir:
                 if os.path.exists(path):  # remove duplicate files in a same date
@@ -510,7 +667,7 @@ class Scraper:
                 else:
                     Scraper.__saving_paths.update({path: 1})
 
-                dict_to_csv(product.info(), path)
+                dict_to_csv(asdict(product), path)
 
     @classmethod
     async def execute(

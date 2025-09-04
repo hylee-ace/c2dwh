@@ -31,9 +31,7 @@ def crawling_work(upload_to_s3: bool = False):
     crawler.reset()
 
 
-def scraping_work(
-    upload_to_s3: bool = False,
-):
+def scraping_work(upload_to_s3: bool = False):
     urls = [i["url"] for i in csv_reader("./data/crawled/thegioididong_urls.csv")]
     scraper = Scraper(
         urls,
@@ -55,7 +53,7 @@ def scraping_work(
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-@runtime
+# @runtime
 def main():
     # crawling_work(upload_to_s3=True)
     scraping_work()

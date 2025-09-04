@@ -1,3 +1,3 @@
 from .crawler import Crawler
 from .scraper import Scraper
-from .models import Phone, Laptop, Watch, Screen, Earphone, Tablet, ProductInfo
+from .models import Phone, Tablet, Laptop, Watch, Screen, Earphone, ProductInfo

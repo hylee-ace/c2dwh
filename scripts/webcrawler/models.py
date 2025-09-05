@@ -112,9 +112,8 @@ class Watch(ProductInfo):
 
 
 @dataclass
-class Earphone(ProductInfo):
+class Earphones(ProductInfo):
     sound_tech: str | None = None
-    speaker_driver: str | None = None  # 11mm
     compatible: str | None = None  # os or android
     control: str | None = None  # touch or button
     connectivity: str | None = None  # bluetooth

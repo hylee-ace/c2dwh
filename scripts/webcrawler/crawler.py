@@ -97,9 +97,10 @@ class Crawler:
         retry_delay: float = 2.0,
     ):
         """
-        Asynchronously inspect HTML content from given URL. **limit_content_in** is used for reducing 
+        Asynchronously inspect HTML content from given URL. **limit_content_in** is used for reducing
         encoded response content when inspecting which helps inspect efficiently.
         """
+
         last_exception = None
         resp = None
         content = None

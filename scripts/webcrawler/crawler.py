@@ -1,4 +1,4 @@
-import asyncio, httpx, os
+import asyncio, httpx, os, re
 from utils import colorized, dict_to_csv, s3_file_uploader
 from lxml import html
 from urllib.parse import urljoin, urlparse
@@ -90,16 +90,25 @@ class Crawler:
         *,
         client: httpx.AsyncClient | None = None,
         xpath: str | None = None,
+        limit_content_in: str | list[str] | None = None,
         semaphore: asyncio.Semaphore | None = None,
         encoding: str | None = None,
         retries: int = 3,
         retry_delay: float = 2.0,
     ):
         """
-        Asynchronously inspect HTML content from given URL.
+        Asynchronously inspect HTML content from given URL. **limit_content_in** is used for reducing 
+        encoded response content when inspecting which helps inspect efficiently.
         """
         last_exception = None
         resp = None
+        content = None
+
+        if limit_content_in and not encoding:
+            print(
+                "Cannot use 'limit_content_in' regex without encoding bytes-like content."
+            )
+            return
 
         if not semaphore:  # limit number of concurrent processes
             semaphore = asyncio.Semaphore(5)
@@ -138,14 +147,47 @@ class Crawler:
             print(f"Inspecting {url} failed 3 times >> {last_exception}")
             return
 
-        source = html.fromstring(
-            resp.content if not encoding else resp.content.decode(encoding)
-        )
+        # reduce html content
+        if limit_content_in:
+            if isinstance(limit_content_in, str):
+                found = re.findall(
+                    limit_content_in,
+                    resp.content if not encoding else resp.content.decode(encoding),
+                    re.S,
+                )
+                content = (
+                    "\n".join(found)
+                    if found
+                    else resp.content if not encoding else resp.content.decode(encoding)
+                )
+            else:
+                result = []
+                for i in limit_content_in:
+                    found = re.findall(
+                        i,
+                        resp.content if not encoding else resp.content.decode(encoding),
+                        re.S,
+                    )
+                    if not found:
+                        continue
+                    result.extend(found)
+                content = (
+                    "\n".join(result)
+                    if result
+                    else resp.content if not encoding else resp.content.decode(encoding)
+                )
+        else:
+            content = resp.content if not encoding else resp.content.decode(encoding)
 
-        if xpath:
-            return source.xpath(xpath)
-
-        return html.tostring(source, pretty_print=True, encoding="unicode")
+        # inspect
+        try:
+            source = html.fromstring(content)
+            if xpath:
+                return source.xpath(xpath)
+            return html.tostring(source, pretty_print=True, encoding="unicode")
+        except Exception as e:
+            print(f"Error occurs while inspecting {url} >> {e}")
+            return
 
     async def __crawl(
         url: str,

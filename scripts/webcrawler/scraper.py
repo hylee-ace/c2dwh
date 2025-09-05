@@ -1,6 +1,6 @@
 import httpx, json, asyncio, os, re
 from .crawler import Crawler
-from .models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphone, Screen
+from .models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphones, Screen
 from utils import colorized, dict_to_csv, s3_file_uploader
 from py_mini_racer import MiniRacer
 from urllib.parse import urlparse
@@ -123,9 +123,7 @@ class Scraper:
         released_value = [
             i["value"].strip()
             for i in data["additionalProperty"]
-            if i["name"] == "Thời điểm ra mắt"
-            or i["name"] == "Thời gian ra mắt"
-            or i["name"] == "Năm ra mắt"
+            if i["name"] in ["Thời điểm ra mắt", "Thời gian ra mắt", "Năm ra mắt"]
         ]
         prd.release_date = released_value[0].strip() if released_value else None
 
@@ -133,7 +131,7 @@ class Scraper:
         dim_value = [
             i["value"]
             for i in data["additionalProperty"]
-            if i["name"] == "Kích thước, khối lượng" or i["name"] == "Khối lượng"
+            if i["name"] in ["Kích thước, khối lượng", "Khối lượng"]
         ]
         jack_value = [
             i["value"].strip()
@@ -141,31 +139,37 @@ class Scraper:
             if i["name"] == "Jack cắm"
         ]
 
-        if prd.url.split("/")[3] == "laptop":  # classify by url hint
-            prd.category = "Laptop"
-        elif prd.url.split("/")[3] == "may-tinh-bang":
-            prd.category = "Tablet"
-        elif prd.url.split("/")[3] == "man-hinh-may-tinh":
-            prd.category = "Screen"
-        else:  # classify by weight and width
-            if dim_value:
-                g_vals = re.findall(r"(\d+\.?\d*)\s?(?:g|\()", dim_value[0])
-                gam = float(g_vals[0]) if g_vals else None  # actual weight value in gam
+        match prd.url.split("/")[3]:
+            case "laptop":  # classify by url hint
+                prd.category = "Laptop"
+            case "may-tinh-bang":
+                prd.category = "Tablet"
+            case "man-hinh-may-tinh":
+                prd.category = "Screen"
+            case _:  # classify by weight and width
+                if dim_value:
+                    g_vals = re.findall(r"(\d+\.?\d*)\s?(?:g|\()", dim_value[0])
+                    gam = (
+                        float(g_vals[0]) if g_vals else None
+                    )  # actual weight value in gam
 
-                if prd.url.split("/")[3] == "dtdd":
-                    prd.category = "Smartphone" if gam and gam >= 135.0 else "Phone"
-                elif prd.url.split("/")[3] == "dong-ho-thong-minh":
-                    mm_vals = re.findall(r"Ngang\s?(\d+\.?\d*)\s?mm", dim_value[0])
-                    mm = (
-                        float(mm_vals[0]) if mm_vals else None
-                    )  # actual width value in mm
-                    prd.category = "Smartwatch" if mm and mm > 33.5 else "Smartband"
+                    if prd.url.split("/")[3] == "dtdd":
+                        prd.category = "Smartphone" if gam and gam >= 135.0 else "Phone"
+                    elif prd.url.split("/")[3] == "dong-ho-thong-minh":
+                        mm_vals = re.findall(r"Ngang\s?(\d+\.?\d*)\s?mm", dim_value[0])
+                        mm = (
+                            float(mm_vals[0]) if mm_vals else None
+                        )  # actual width value in mm
+                        prd.category = "Smartwatch" if mm and mm > 33.5 else "Smartband"
+                    else:
+                        prd.category = (
+                            "Headphone"
+                            if gam and gam > 100.0
+                            else "Earphones" if jack_value else "Earbuds"
+                        )
                 else:
-                    prd.category = (
-                        "Headphone"
-                        if gam and gam > 100.0
-                        else "Earphone" if jack_value else "Earbuds"
-                    )
+                    if prd.url.split("/")[3] == "tai-nghe":
+                        prd.category = "Earphones"
 
         return asdict(prd)
 
@@ -299,7 +303,7 @@ class Scraper:
             return value[0] if value else None
 
         def water_resistant():
-            if device == "earphone":
+            if device == "earphones":
                 value = [j.strip() for i, j in data if i == "Tiện ích"]
                 return (
                     re.sub(r".*(IP\d+).*", r"\1", value[0])
@@ -389,14 +393,6 @@ class Scraper:
         def sound_tech():
             value = [j.strip() for i, j in data if i == "Công nghệ âm thanh"]
             return value[0] if value else None
-
-        def speaker_driver():
-            value = [j.strip() for i, j in data if i == "Công nghệ âm thanh"]
-            return (
-                re.sub(r".*(Driver\s+\d+\s*mm).*", r"\1", value[0])
-                if value and re.findall(r"Driver\s+\d+\s*mm", value[0])
-                else None
-            )
 
         def compatible():
             value = [j.strip() for i, j in data if i == "Tương thích"]
@@ -503,10 +499,9 @@ class Scraper:
                     "weight": weight(),
                     "material": material(),
                 }
-            case "earphone":
+            case "earphones":
                 return {
                     "sound_tech": sound_tech(),
-                    "speaker_driver": speaker_driver(),
                     "compatible": compatible(),
                     "control": control(),
                     "water_resistant": water_resistant(),
@@ -538,29 +533,33 @@ class Scraper:
         specs_data = []  # full specs info
         product = None
         path = None
-        include = [
-            ("*", "@id='productld'", ""),  # tag, condition, ancestor
-            ("span", "@class='circle'", "/ancestor::li"),
-            ("a", "contains(@class,'tzLink')", "/ancestor::li"),
-            ("span", "@class=''", "/ancestor::li"),
-        ]
 
-        fetched = await Crawler.async_inspect(
-            url,
-            xpath="|".join([f"//{i[0]}[{i[1]}]{i[2]}" for i in include]),
-            encoding="utf-8",
-            client=client,
-            semaphore=semaphore,
-        )
-
-        # check fetched data
-        if not fetched:
+        # ignore which is not product pages
+        if all(
+            [
+                not re.findall(r"/dtdd/", url),
+                not re.findall(r"/laptop/", url),
+                not re.findall(r"/may-tinh-bang/", url),
+                not re.findall(r"/dong-ho-thong-minh/", url),
+                not re.findall(r"/tai-nghe/", url),
+                not re.findall(r"/man-hinh-may-tinh/", url),
+            ]
+        ):
             async with Scraper.__lock:
                 Scraper.__scraped.add(url)
                 Scraper.__queue.discard(url)
             return
 
-        # prepare data
+        fetched = await Crawler.async_inspect(
+            url,
+            xpath="//script[@id='productld']|//div[@class='box-specifi']/ul/"
+            + "li[.//span[@class='circle'] or .//a[contains(@class,'tzLink')] or .//span[@class='']]",
+            encoding="utf-8",
+            client=client,
+            semaphore=semaphore,
+        )
+
+        # classify fetched data
         data = [
             re.sub(r"\s{2,}", ", ", i.text_content().strip())
             for i in fetched
@@ -576,82 +575,77 @@ class Scraper:
             if not re.findall(r"{|}", i)
         ]
 
-        if not json_content or not tags_content:  # if separating failed
-            async with Scraper.__lock:
-                Scraper.__scraped.add(url)
-                Scraper.__queue.discard(url)
-            return
-
         full_data = json.loads(json_content[0])
         specs_data.extend(tags_content)
 
         # parse product info
-        if url.split("/")[3] == "dtdd":
-            product = Phone(
-                **Scraper.__parse_common_info(full_data),
-                **Scraper.__parse_specs_info(specs_data, "phone"),
-            )
-            path = os.path.join(
-                Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_phones_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            )
-            if not Scraper.__saving_paths.get(path):
-                Scraper.__saving_paths[path] = 0
-        elif url.split("/")[3] == "laptop":
-            product = Laptop(
-                **Scraper.__parse_common_info(full_data),
-                **Scraper.__parse_specs_info(specs_data, "laptop"),
-            )
-            path = os.path.join(
-                Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_laptops_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            )
-            if not Scraper.__saving_paths.get(path):
-                Scraper.__saving_paths[path] = 0
-        elif url.split("/")[3] == "may-tinh-bang":
-            product = Tablet(
-                **Scraper.__parse_common_info(full_data),
-                **Scraper.__parse_specs_info(specs_data, "tablet"),
-            )
-            path = os.path.join(
-                Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_tablets_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            )
-            if not Scraper.__saving_paths.get(path):
-                Scraper.__saving_paths[path] = 0
-        elif url.split("/")[3] == "dong-ho-thong-minh":
-            product = Watch(
-                **Scraper.__parse_common_info(full_data),
-                **Scraper.__parse_specs_info(specs_data, "watch"),
-            )
-            path = os.path.join(
-                Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_watches_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            )
-            if not Scraper.__saving_paths.get(path):
-                Scraper.__saving_paths[path] = 0
-        elif url.split("/")[3] == "tai-nghe":
-            product = Earphone(
-                **Scraper.__parse_common_info(full_data),
-                **Scraper.__parse_specs_info(specs_data, "earphone"),
-            )
-            path = os.path.join(
-                Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_earphones_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            )
-            if not Scraper.__saving_paths.get(path):
-                Scraper.__saving_paths[path] = 0
-        elif url.split("/")[3] == "man-hinh-may-tinh":
-            product = Screen(
-                **Scraper.__parse_common_info(full_data),
-                **Scraper.__parse_specs_info(specs_data, "screen"),
-            )
-            path = os.path.join(
-                Scraper.saving_dir,
-                f"{Scraper.__retailer.lower()}_screens_{datetime.now().strftime("%Y-%m-%d")}.csv",
-            )
-            if not Scraper.__saving_paths.get(path):
-                Scraper.__saving_paths[path] = 0
+        match url.split("/")[3]:
+            case "dtdd":
+                product = Phone(
+                    **Scraper.__parse_common_info(full_data),
+                    **Scraper.__parse_specs_info(specs_data, "phone"),
+                )
+                path = os.path.join(
+                    Scraper.saving_dir,
+                    f"{Scraper.__retailer.lower()}_phones_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                )
+                if not Scraper.__saving_paths.get(path):
+                    Scraper.__saving_paths[path] = 0
+            case "laptop":
+                product = Laptop(
+                    **Scraper.__parse_common_info(full_data),
+                    **Scraper.__parse_specs_info(specs_data, "laptop"),
+                )
+                path = os.path.join(
+                    Scraper.saving_dir,
+                    f"{Scraper.__retailer.lower()}_laptops_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                )
+                if not Scraper.__saving_paths.get(path):
+                    Scraper.__saving_paths[path] = 0
+            case "may-tinh-bang":
+                product = Tablet(
+                    **Scraper.__parse_common_info(full_data),
+                    **Scraper.__parse_specs_info(specs_data, "tablet"),
+                )
+                path = os.path.join(
+                    Scraper.saving_dir,
+                    f"{Scraper.__retailer.lower()}_tablets_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                )
+                if not Scraper.__saving_paths.get(path):
+                    Scraper.__saving_paths[path] = 0
+            case "dong-ho-thong-minh":
+                product = Watch(
+                    **Scraper.__parse_common_info(full_data),
+                    **Scraper.__parse_specs_info(specs_data, "watch"),
+                )
+                path = os.path.join(
+                    Scraper.saving_dir,
+                    f"{Scraper.__retailer.lower()}_watches_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                )
+                if not Scraper.__saving_paths.get(path):
+                    Scraper.__saving_paths[path] = 0
+            case "tai-nghe":
+                product = Earphones(
+                    **Scraper.__parse_common_info(full_data),
+                    **Scraper.__parse_specs_info(specs_data, "earphones"),
+                )
+                path = os.path.join(
+                    Scraper.saving_dir,
+                    f"{Scraper.__retailer.lower()}_earphones_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                )
+                if not Scraper.__saving_paths.get(path):
+                    Scraper.__saving_paths[path] = 0
+            case "man-hinh-may-tinh":
+                product = Screen(
+                    **Scraper.__parse_common_info(full_data),
+                    **Scraper.__parse_specs_info(specs_data, "screen"),
+                )
+                path = os.path.join(
+                    Scraper.saving_dir,
+                    f"{Scraper.__retailer.lower()}_screens_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                )
+                if not Scraper.__saving_paths.get(path):
+                    Scraper.__saving_paths[path] = 0
 
         # update results
         async with Scraper.__lock:

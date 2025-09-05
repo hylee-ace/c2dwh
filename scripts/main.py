@@ -55,8 +55,8 @@ def scraping_work(upload_to_s3: bool = False):
 
 @runtime
 def main():
-    crawling_work(upload_to_s3=True)
-    # scraping_work()
+    # crawling_work(upload_to_s3=True)
+    scraping_work(upload_to_s3=True)
 
 
 if __name__ == "__main__":

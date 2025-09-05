@@ -22,6 +22,7 @@ def runtime(func: object):
     """
     Decorator for estimating runtime of a process.
     """
+    
     is_async = inspect.iscoroutinefunction(func)
 
     @functools.wraps(func)

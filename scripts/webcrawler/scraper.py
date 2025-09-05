@@ -285,13 +285,17 @@ class Scraper:
                 value = [j.strip() for i, j in data if i == "Tần số quét"]
                 return value[0] if value else None
             value = [j.strip() for i, j in data if i == "Màn hình rộng"]
-            return re.sub(r".*\s(\d+\.?\d*\s*Hz)", r"\1", value[0]) if value else None
+            return (
+                re.sub(r".*?(\d+\.?\d*\s*Hz)", r"\1", value[0])
+                if value and re.findall(r"\d+\.?\d*\s*Hz", value[0])
+                else None
+            )
 
         def screen_nits():
             if device == "laptop":
                 value = [j.strip() for i, j in data if i == "Công nghệ màn hình"]
                 return (
-                    re.sub(r".*\s+(\d+\s*nits).*", r"\1", value[0])
+                    re.sub(r".*?(\d+\s?nits).*", r"\1", value[0])
                     if value and re.findall(r"\d+\s?nits", value[0])
                     else None
                 )
@@ -306,8 +310,8 @@ class Scraper:
             if device == "earphones":
                 value = [j.strip() for i, j in data if i == "Tiện ích"]
                 return (
-                    re.sub(r".*(IP\d+).*", r"\1", value[0])
-                    if value and re.findall(r"IP\d+", value[0])
+                    re.sub(r".*?(IP[X0-9]+).*", r"\1", value[0])
+                    if value and re.findall(r"IP[X0-9]+", value[0])
                     else None
                 )
             value = [
@@ -344,7 +348,7 @@ class Scraper:
             ]
             return (
                 re.sub(r"(.*Nặng\s+)?(\d+\.?\d*)\s*[g(].*", r"\2", value[0]) + " g"
-                if value
+                if value and re.findall(r"(.*Nặng\s+)?\d+\.?\d*\s*[g(]", value[0])
                 else None
             )
 
@@ -554,6 +558,10 @@ class Scraper:
             url,
             xpath="//script[@id='productld']|//div[@class='box-specifi']/ul/"
             + "li[.//span[@class='circle'] or .//a[contains(@class,'tzLink')] or .//span[@class='']]",
+            limit_content_in=[
+                r'<script[^>]*id="productld"[^>]*>.*?</script>',
+                r'<section[^>]*class="detail detailv2"[^>]*>.*?</section>',
+            ],  # [^>] and .*? are for non-greedy
             encoding="utf-8",
             client=client,
             semaphore=semaphore,

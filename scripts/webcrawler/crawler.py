@@ -154,7 +154,7 @@ class Crawler:
                 found = re.findall(
                     limit_content_in,
                     resp.content if not encoding else resp.content.decode(encoding),
-                    re.S,
+                    re.S,  # get any characters including newlines
                 )
                 content = (
                     "\n".join(found)
@@ -196,7 +196,12 @@ class Crawler:
         semaphore: asyncio.Semaphore,
     ):
         found = await Crawler.async_inspect(
-            url, client=client, xpath=Crawler.search, semaphore=semaphore
+            url,
+            client=client,
+            xpath=Crawler.search,
+            semaphore=semaphore,
+            limit_content_in=r"<a[^>]*href[^>]*>.*?</a>",
+            encoding="utf-8",
         )
 
         if not found:  # url might be broken or facing IP banned

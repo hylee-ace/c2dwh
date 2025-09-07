@@ -595,7 +595,7 @@ class Scraper:
                 )
                 path = os.path.join(
                     Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_phones_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                    f"{Scraper.__retailer.lower()}_phones_{datetime.today().date()}.csv",
                 )
                 if not Scraper.__saving_paths.get(path):
                     Scraper.__saving_paths[path] = 0
@@ -606,7 +606,7 @@ class Scraper:
                 )
                 path = os.path.join(
                     Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_laptops_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                    f"{Scraper.__retailer.lower()}_laptops_{datetime.today().date()}.csv",
                 )
                 if not Scraper.__saving_paths.get(path):
                     Scraper.__saving_paths[path] = 0
@@ -617,7 +617,7 @@ class Scraper:
                 )
                 path = os.path.join(
                     Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_tablets_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                    f"{Scraper.__retailer.lower()}_tablets_{datetime.today().date()}.csv",
                 )
                 if not Scraper.__saving_paths.get(path):
                     Scraper.__saving_paths[path] = 0
@@ -628,7 +628,7 @@ class Scraper:
                 )
                 path = os.path.join(
                     Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_watches_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                    f"{Scraper.__retailer.lower()}_watches_{datetime.today().date()}.csv",
                 )
                 if not Scraper.__saving_paths.get(path):
                     Scraper.__saving_paths[path] = 0
@@ -639,7 +639,7 @@ class Scraper:
                 )
                 path = os.path.join(
                     Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_earphones_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                    f"{Scraper.__retailer.lower()}_earphones_{datetime.today().date()}.csv",
                 )
                 if not Scraper.__saving_paths.get(path):
                     Scraper.__saving_paths[path] = 0
@@ -650,7 +650,7 @@ class Scraper:
                 )
                 path = os.path.join(
                     Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_screens_{datetime.now().strftime("%Y-%m-%d")}.csv",
+                    f"{Scraper.__retailer.lower()}_screens_{datetime.today().date()}.csv",
                 )
                 if not Scraper.__saving_paths.get(path):
                     Scraper.__saving_paths[path] = 0
@@ -779,12 +779,13 @@ class Scraper:
 
             for i in Scraper.__saving_paths:
                 filename = os.path.basename(i)
-                key = f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}{filename}"
-                date = datetime.fromisoformat(
-                    filename.removesuffix(".csv").split("_")[-1]
+                key = (
+                    f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}"
+                    + f"{filename.split('_')[1]}/"
+                    + f"date={filename.split('_')[2].removesuffix('.csv')}/"
+                    + f"bronze_{filename.split('_')[1]}.csv"
                 )
-                if date.date() == datetime.now().date():  # check valid date
-                    files.append({"file": i, "bucket": bucket, "key": key})
+                files.append({"file": i, "bucket": bucket, "key": key})
 
             tasks = [asyncio.to_thread(upload, **i) for i in files]
             await asyncio.gather(*tasks)

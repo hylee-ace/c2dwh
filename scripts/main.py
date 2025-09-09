@@ -18,7 +18,7 @@ def crawling_work(upload_to_s3: bool = False):
         search=f"//a[{text}]/@href",
         save_in="./data/crawled",
         upload_to_s3=upload_to_s3,
-        s3_attrs={"bucket": "crawling-to-datalake", "obj_prefix": "crawled/"},
+        s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "crawled/"},
     )
 
     asyncio.run(
@@ -37,7 +37,7 @@ def scraping_work(upload_to_s3: bool = False):
         urls,
         save_in="./data/scraped",
         upload_to_s3=upload_to_s3,
-        s3_attrs={"bucket": "crawling-to-datalake", "obj_prefix": "bronze/"},
+        s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "bronze/"},
     )
 
     asyncio.run(
@@ -55,8 +55,8 @@ def scraping_work(upload_to_s3: bool = False):
 
 @runtime
 def main():
-    crawling_work(upload_to_s3=True)
-    # scraping_work(upload_to_s3=True)
+    # crawling_work(upload_to_s3=True)
+    scraping_work(upload_to_s3=True)
 
 
 if __name__ == "__main__":

@@ -27,9 +27,9 @@ class Crawler:
     search = None
     saving_path = None
     __queue = set()
-    __crawled = set()
-    result = set()
-    __history = set()
+    __crawled = set()  # found urls
+    result = set()  # valid urls
+    __history = set()  # old urls from file
     upload_to_s3 = False
     s3_attrs = dict()
     __lock = asyncio.Lock()

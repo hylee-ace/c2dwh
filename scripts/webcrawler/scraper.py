@@ -114,6 +114,7 @@ class Scraper:
             price=int(data["offers"]["price"]),
             brand=data["brand"]["name"][0].strip(),
             url=data["url"].strip(),
+            updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
 
         if data["aggregateRating"]:

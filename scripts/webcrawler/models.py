@@ -13,6 +13,7 @@ class ProductInfo:
     reviews_count: int | None = None
     url: str | None = None
     release_date: datetime | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass
@@ -39,7 +40,6 @@ class Phone(ProductInfo):
     connectivity: str | None = None  # wifi or bluetooth
     network: str | None = None  # 4g or 5g
     ports: str | None = None  # typeC or jack 3.5mm
-    updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -64,7 +64,6 @@ class Tablet(ProductInfo):
     connectivity: str | None = None  # wifi or bluetooth
     network: str | None = None  # 4g or 5g
     ports: str | None = None  # typeC or jack 3.5mm
-    updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -92,7 +91,6 @@ class Laptop(ProductInfo):
     material: str | None = None
     connectivity: str | None = None  # wifi or bluetooth
     ports: str | None = None  # thunderbolt or hdmi
-    updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -108,7 +106,6 @@ class Watch(ProductInfo):
     battery: str | None = None
     weight: str | None = None
     material: str | None = None
-    updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -122,7 +119,6 @@ class Earphones(ProductInfo):
     battery: str | None = None
     case_battery: str | None = None
     weight: str | None = None
-    updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -136,4 +132,3 @@ class Screen(ProductInfo):
     power_consumption: str | None = None
     ports: str | None = None
     weight: str | None = None
-    updated_at: datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

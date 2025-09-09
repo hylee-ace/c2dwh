@@ -24,7 +24,7 @@ class Scraper:
 
     __retailer = None
     saving_dir = None
-    __saving_paths = dict()  # inclust path and is_removed status (1 and 0)
+    __saving_paths = dict()  # include path and is_removed status (1 and 0)
     __queue = set()
     __scraped = set()
     result = list()
@@ -553,38 +553,44 @@ class Scraper:
                 Scraper.__scraped.add(url)
                 Scraper.__queue.discard(url)
             return
-
-        fetched = await Crawler.async_inspect(
-            url,
-            xpath="//script[@id='productld']|//div[@class='box-specifi']/ul/"
-            + "li[.//span[@class='circle'] or .//a[contains(@class,'tzLink')] or .//span[@class='']]",
-            limit_content_in=[
-                r'<script[^>]*id="productld"[^>]*>.*?</script>',
-                r'<section[^>]*class="detail detailv2"[^>]*>.*?</section>',
-            ],  # [^>] and .*? are for non-greedy
-            encoding="utf-8",
-            client=client,
-            semaphore=semaphore,
-        )
-
-        # classify fetched data
-        data = [
-            re.sub(r"\s{2,}", ", ", i.text_content().strip())
-            for i in fetched
-            if ":" in i.text_content()
-        ]  # remove noise from fetched json
-        json_content = [i for i in data if re.findall(r"{|}", i)]
-        tags_content = [
-            (
-                i.split(":")[0].strip(),
-                "".join(i.split(":")[1:]).removeprefix(",").strip(),
+        try:
+            fetched = await Crawler.async_inspect(
+                url,
+                xpath="//script[@id='productld']|//div[@class='box-specifi']/ul/"
+                + "li[.//span[@class='circle'] or .//a[contains(@class,'tzLink')] or .//span[@class='']]",
+                limit_content_in=[
+                    r'<script[^>]*id="productld"[^>]*>.*?</script>',
+                    r'<section[^>]*class="detail detailv2"[^>]*>.*?</section>',
+                ],  # [^>] and .*? are for non-greedy
+                encoding="utf-8",
+                client=client,
+                semaphore=semaphore,
             )
-            for i in data
-            if not re.findall(r"{|}", i)
-        ]
 
-        full_data = json.loads(json_content[0])
-        specs_data.extend(tags_content)
+            # classify fetched data
+            data = [
+                re.sub(r"\s{2,}", ", ", i.text_content().strip())
+                for i in fetched
+                if ":" in i.text_content()
+            ]  # remove noise from fetched json
+            json_content = [i for i in data if re.findall(r"{|}", i)]
+            tags_content = [
+                (
+                    i.split(":")[0].strip(),
+                    "".join(i.split(":")[1:]).removeprefix(",").strip(),
+                )
+                for i in data
+                if not re.findall(r"{|}", i)
+            ]
+
+            full_data = json.loads(json_content[0])
+            specs_data.extend(tags_content)
+        except Exception:
+            print(f"{url} might be removed from the website. Check again.")
+            async with Scraper.__lock:
+                Scraper.__scraped.add(url)
+                Scraper.__queue.discard(url)
+            return
 
         # parse product info
         match url.split("/")[3]:
@@ -783,7 +789,7 @@ class Scraper:
                     f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}"
                     + f"{filename.split('_')[1]}/"
                     + f"date={filename.split('_')[2].removesuffix('.csv')}/"
-                    + f"bronze_{filename.split('_')[1]}.csv"
+                    + f"{filename.split('_')[1]}.csv"
                 )
                 files.append({"file": i, "bucket": bucket, "key": key})
 

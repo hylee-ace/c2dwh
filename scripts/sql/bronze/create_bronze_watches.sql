@@ -1,4 +1,4 @@
-CREATE EXTERNAL TABLE IF NOT EXISTS c2dwh_bronze.watches (
+create external table if not exists c2dwh_bronze.watches (
 	sku string,
 	name string,
 	price string,
@@ -21,17 +21,17 @@ CREATE EXTERNAL TABLE IF NOT EXISTS c2dwh_bronze.watches (
 	weight string,
 	material string
 )
-PARTITIONED BY (date date)
-ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
-WITH SERDEPROPERTIES (
+partitioned by (date date)
+row format serde 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+with serdeproperties (
 	'separatorChar' = ',',
 	'quoteChar' = '"',
 	'escapeChar' = '\\',
-	'serialization.null.format' = '""'
+	'serialization.null.format' = '' -- this match to null value in csv file
 )
-STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat' OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-LOCATION 's3://crawling-to-dwh/bronze/watches/'
-TBLPROPERTIES (
+stored as inputformat 'org.apache.hadoop.mapred.TextInputFormat' outputformat 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+location 's3://crawling-to-dwh/bronze/watches/'
+tblproperties (
 	'classification' = 'csv',
 	'skip.header.line.count' = '1'
 );

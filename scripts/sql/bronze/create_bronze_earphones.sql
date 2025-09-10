@@ -1,4 +1,4 @@
-CREATE EXTERNAL TABLE IF NOT EXISTS c2dwh_bronze.earphones (
+create external table if not exists c2dwh_bronze.earphones (
 	sku string,
 	name string,
 	price string,
@@ -19,17 +19,17 @@ CREATE EXTERNAL TABLE IF NOT EXISTS c2dwh_bronze.earphones (
 	case_battery string,
 	weight string
 )
-PARTITIONED BY (date date)
-ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
-WITH SERDEPROPERTIES (
+partitioned by (date date)
+row format serde 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+with serdeproperties (
 	'separatorChar' = ',',
 	'quoteChar' = '"',
 	'escapeChar' = '\\',
-	'serialization.null.format' = '""'
+	'serialization.null.format' = '' -- this match to null value in csv file
 )
-STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat' OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-LOCATION 's3://crawling-to-dwh/bronze/earphones/'
-TBLPROPERTIES (
+stored as inputformat 'org.apache.hadoop.mapred.TextInputFormat' outputformat 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+location 's3://crawling-to-dwh/bronze/earphones/'
+tblproperties (
 	'classification' = 'csv',
 	'skip.header.line.count' = '1'
 );

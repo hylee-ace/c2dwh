@@ -1,6 +1,12 @@
 insert into c2dwh_silver.earphones with temp as(
 		select cast(sku as int) sku,
-			name,
+			trim(
+				regexp_replace(
+					name,
+					'Tai (N|n)ghe|Bluetooth|(C|c)hụp (T|t)ai|Gaming|Open\s?-\s?Ear|True Wireless|(T|t)hể thao|Có (D|d)ây|truyền âm thanh qua không khí|truyền xương|dẫn khí truyền âm',
+					''
+				)
+			) name,
 			case
 				when price = '0' then null else cast(price as int)
 			end price,
@@ -41,7 +47,7 @@ insert into c2dwh_silver.earphones with temp as(
 				when water_resistant = '' then null else water_resistant
 			end water_resistant,
 			case
-				when ports = '' then null else ports
+				when ports = '' then null else regexp_replace(ports, '(3.5 mm)', 'Jack $1')
 			end ports,
 			cast(
 				regexp_extract(battery, 'Dùng.*?(\d+\.?\d*).*giờ.*', 1) as double
@@ -75,7 +81,7 @@ insert into c2dwh_silver.earphones with temp as(
 				when weight = '' then null else cast(
 					regexp_extract(weight, '(\d+\.?\d*)±?.*', 1) as double
 				)
-			end weight_gam,
+			end weight_g,
 			row_number() over(
 				partition by sku
 				order by updated_at desc
@@ -100,7 +106,7 @@ select sku,
 	recharge_hrs,
 	case_runtime_hrs,
 	case_recharge_hrs,
-	weight_gam,
+	weight_g,
 	url,
 	release_year,
 	release_month,

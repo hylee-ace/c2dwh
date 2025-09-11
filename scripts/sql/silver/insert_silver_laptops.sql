@@ -129,15 +129,13 @@ insert into c2dwh_silver.laptops with temp as(
 			end ports,
 			url,
 			case
-				regexp_like(release_date, '/')
-				when true then try_cast(
-					element_at(regexp_split(release_date, '/'), -1) as int
+				when regexp_count(release_date, '/') > 0 then try_cast(
+					regexp_split(release_date, '/') [ 2 ] as int
 				) else try_cast(release_date as int)
 			end release_year,
 			case
-				regexp_like(release_date, '/')
-				when true then try_cast(
-					element_at(regexp_split(release_date, '/'), 1) as int
+				when regexp_count(release_date, '/') > 0 then try_cast(
+					regexp_split(release_date, '/') [ 1 ] as int
 				) else null
 			end release_month,
 			cast(updated_at as timestamp) updated_at,
@@ -189,6 +187,6 @@ select sku,
 	updated_at,
 	date
 from temp
-where latest = 1 
+where latest = 1
 	and date = current_date -- this filter to ensure athena not recreate all partition in s3
 order by sku

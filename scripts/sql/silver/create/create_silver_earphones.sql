@@ -16,7 +16,7 @@ create external table if not exists c2dwh_silver.earphones (
 	recharge_hrs double,
 	case_runtime_hrs double,
 	case_recharge_hrs double,
-	weight_gam double,
+	weight_g double,
 	url string,
 	release_year int,
 	release_month int,

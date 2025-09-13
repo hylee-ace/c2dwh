@@ -22,7 +22,7 @@ def runtime(func: object):
     """
     Decorator for estimating runtime of a process.
     """
-    
+
     is_async = inspect.iscoroutinefunction(func)
 
     @functools.wraps(func)
@@ -276,3 +276,104 @@ def s3_file_uploader(
         client.upload_file(Filename=path, Bucket=bucket, Key=key)
     except AwsClientError as e:
         print(f"Cannot upload {os.path.basename(path)} >> {e.response}")
+
+
+def athena_sql_executor(
+    query: str,
+    *,
+    client: BaseClient | None = None,
+    database: str | None = None,
+    output_location: str | None = None,
+    encrypt_config: dict | None = None,
+):
+    """
+    Execute SQL query on AWS Athena.
+    """
+    data = {}
+
+    # get aws credentials
+    with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
+        content = json.load(file)
+        key_id = content["access_key"]
+        secret_key = content["secrect_access_key"]
+
+    # initialize client
+    if not client:
+        client = boto3.client(
+            "athena",
+            region_name="us-east-1",
+            aws_access_key_id=key_id,
+            aws_secret_access_key=secret_key,
+        )
+
+    # execute the query
+    try:
+        resp = client.start_query_execution(
+            QueryString=query,
+            QueryExecutionContext={
+                "Database": "default" if not database else database,
+                "Catalog": "AwsDataCatalog",
+            },
+            ResultConfiguration={
+                "OutputLocation": (
+                    "s3://c2dwh-athena-queries/"
+                    if not output_location
+                    else output_location
+                ),
+                "EncryptionConfiguration": (
+                    {"EncryptionOption": "SSE_S3"}
+                    if not encrypt_config
+                    else encrypt_config
+                ),
+            },
+        )
+    except AwsClientError as e:
+        print(f"Cannot execute the query >> {e.response}")
+        return
+
+    # wait for executing
+    while True:
+        execution = client.get_query_execution(
+            QueryExecutionId=resp["QueryExecutionId"]
+        )
+
+        if execution["QueryExecution"]["Status"]["State"] in [
+            "FAILED",
+            "CANCELLED",
+        ]:
+            print(
+                f'Execution {execution["QueryExecution"]["Status"]["State"]} with error >>',
+                execution["QueryExecution"]["Status"]
+                .get("AthenaError", {})
+                .get("ErrorMessage"),
+            )
+            return
+        if execution["QueryExecution"]["Status"]["State"] == "SUCCEEDED":
+            break
+
+        time.sleep(0.2)
+
+    # normalize result
+    data["query_execution_id"] = resp["QueryExecutionId"]
+    data["data"] = []
+    paginator = client.get_paginator("get_query_results")
+
+    columns = None
+    for page in paginator.paginate(QueryExecutionId=resp["QueryExecutionId"]):
+        rows = page["ResultSet"]["Rows"]
+
+        if not columns:  # get list of columns and skip 1st row from 1st page only
+            columns = [
+                i.get("VarCharValue") for i in page["ResultSet"]["Rows"][0]["Data"]
+            ]
+            rows = rows[1:]
+
+        for row in rows:
+            data["data"].append(
+                {
+                    columns[i]: row["Data"][i].get("VarCharValue")
+                    for i in range(len(columns))
+                }
+            )
+
+    return data

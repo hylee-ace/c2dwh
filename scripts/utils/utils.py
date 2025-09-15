@@ -377,3 +377,38 @@ def athena_sql_executor(
             )
 
     return data
+
+
+def s3_folder_cleaner(
+    prefix: str | None = None, *, client: BaseClient | None = None, bucket: str
+):
+    """
+    Free up AWS S3 bucket folder by prefix name. If prefix name is empty, everything in bucket will be removed.
+    """
+
+    # get aws credentials
+    with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
+        content = json.load(file)
+        key_id = content["access_key"]
+        secret_key = content["secrect_access_key"]
+
+    # initialize client
+    if not client:
+        client = boto3.client(
+            "s3",
+            region_name="us-east-1",
+            aws_access_key_id=key_id,
+            aws_secret_access_key=secret_key,
+        )
+
+    # get objects list
+    paginator = client.get_paginator("list_objects_v2")
+
+    try:
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix if prefix else ""):
+            objs = [{"Key": i["Key"]} for i in page["Contents"]]
+            client.delete_objects(Bucket=bucket, Delete={"Objects": objs})
+            for i in page["Contents"]:
+                print(f"Removed {i['Key']}.")
+    except AwsClientError as e:
+        print(f"Error occurs while cleaning {prefix if prefix else bucket} >> {e}")

@@ -1,4 +1,4 @@
-import threading, time, functools, inspect, os, csv, boto3, json
+import threading, time, functools, inspect, os, csv, boto3, json, re
 from botocore.exceptions import ClientError as AwsClientError
 from botocore.client import BaseClient
 
@@ -290,6 +290,11 @@ def athena_sql_executor(
     Execute SQL query on AWS Athena.
     """
     data = {}
+    is_select = (
+        True
+        if re.search(r"^\s*select|^\s*with.*?as.*?\(.*\)\s*select", query.lower(), re.S)
+        else False
+    )
 
     # get aws credentials
     with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
@@ -349,11 +354,15 @@ def athena_sql_executor(
             )
             return
         if execution["QueryExecution"]["Status"]["State"] == "SUCCEEDED":
-            break
+            if is_select:
+                break
+            else:
+                print(f'Execution {execution["QueryExecution"]["Status"]["State"]}.')
+                return
 
         time.sleep(0.2)
 
-    # normalize result
+    # normalize result (only for SELECT queries)
     data["query_execution_id"] = resp["QueryExecutionId"]
     data["data"] = []
     paginator = client.get_paginator("get_query_results")

@@ -1,4 +1,4 @@
-import threading, time, functools, inspect, os, csv, boto3, json
+import threading, time, functools, inspect, os, csv, boto3, json, re
 from botocore.exceptions import ClientError as AwsClientError
 from botocore.client import BaseClient
 
@@ -290,6 +290,11 @@ def athena_sql_executor(
     Execute SQL query on AWS Athena.
     """
     data = {}
+    is_select = (
+        True
+        if re.search(r"^\s*select|^\s*with.*?as.*?\(.*\)\s*select", query.lower(), re.S)
+        else False
+    )
 
     # get aws credentials
     with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
@@ -327,34 +332,39 @@ def athena_sql_executor(
                 ),
             },
         )
+        data["query_execution_id"] = resp["QueryExecutionId"]
     except AwsClientError as e:
         print(f"Cannot execute the query >> {e.response}")
-        return
+        return data
 
     # wait for executing
     while True:
         execution = client.get_query_execution(
             QueryExecutionId=resp["QueryExecutionId"]
         )
+        data["query_execution_state"] = execution["QueryExecution"]["Status"]["State"]
 
-        if execution["QueryExecution"]["Status"]["State"] in [
+        if data["query_execution_state"] in [
             "FAILED",
             "CANCELLED",
         ]:
             print(
-                f'Execution {execution["QueryExecution"]["Status"]["State"]} with error >>',
+                f'Execution {data["query_execution_state"]} with error >>',
                 execution["QueryExecution"]["Status"]
                 .get("AthenaError", {})
                 .get("ErrorMessage"),
             )
-            return
-        if execution["QueryExecution"]["Status"]["State"] == "SUCCEEDED":
-            break
+            return data
+        if data["query_execution_state"] == "SUCCEEDED":
+            if is_select:
+                break
+            else:
+                print(f'Execution {data["query_execution_state"]}.')
+                return data
 
         time.sleep(0.2)
 
-    # normalize result
-    data["query_execution_id"] = resp["QueryExecutionId"]
+    # normalize result (only for SELECT queries)
     data["data"] = []
     paginator = client.get_paginator("get_query_results")
 

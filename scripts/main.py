@@ -1,6 +1,7 @@
 import asyncio, os, time, re
 from webcrawler import Crawler, Scraper
 from utils import runtime, csv_reader, athena_sql_executor
+from datetime import datetime
 
 
 def crawling_work(upload_to_s3: bool = False):
@@ -53,9 +54,11 @@ def scraping_work(upload_to_s3: bool = False):
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-def create_bronze_layer(files_location: str):
+def create_tables_from_files(
+    files_location: str, *, database: str, update_partition: bool = False
+):
     queries = []
-    tables = []
+    tables_meta = []
 
     if os.path.isfile(files_location):
         print(f"Invalid path. {files_location} is a file.")
@@ -71,30 +74,47 @@ def create_bronze_layer(files_location: str):
             with open(os.path.join(root, i), "r") as file:
                 queries.append(file.read())
 
+    for i in queries:
+        table = re.search(r"if not exists\s*(.*?)\s*\(", i)
+        bucket = re.search(r"location\s*'(s3://.*?)'", i)
+        tables_meta.append(
+            (table.group(1) if table else "", bucket.group(1) if bucket else "")
+        )
+
     if not queries:
         print("No SQL queries found.")
         return
 
-    print("Start creating BRONZE layer...")
-    for i in queries:
-        resp = athena_sql_executor(i, database="c2dwh_bronze")
-        table = re.search(r"if not exists\s*(.*?)\s*\(", i)
+    print(f"Start creating tables in {database}...")
+    for i in range(len(queries)):
+        resp = athena_sql_executor(queries[i], database=database)
 
         if resp.get("query_execution_state") == "SUCCEEDED":
-            print(f"Create {table.group(1) if table else ''} successfully.")
+            print(f"Create {tables_meta[i][0]} successfully.")
         else:
-            print(f"Creating table {table.group(1) if table else ''} failed.")
+            print(f"Cannot create table {tables_meta[i][0]}.")
 
-        time.sleep(0.2)
+    if update_partition:
+        for i in tables_meta:
+            resp = athena_sql_executor(
+                f"alter table {i[0]} add partition (partition_date = '{datetime.today().date()}') "
+                + f"location '{i[1]}date={datetime.today().date()}'",
+                database=database,
+            )
 
-    # add partitions
+            if resp.get("query_execution_state") == "SUCCEEDED":
+                print(f"Update partition in {i[0]} successfully.")
+            else:
+                print(f"Cannot update partition in {i[0]}.")
 
 
 @runtime
 def main():
     # crawling_work(upload_to_s3=True)
     # scraping_work(upload_to_s3=True)
-    create_bronze_layer(files_location="./scripts/sql/bronze")
+    create_tables_from_files(
+        "./scripts/sql/bronze", database="c2dwh_bronze", update_partition=True
+    )
 
 
 if __name__ == "__main__":

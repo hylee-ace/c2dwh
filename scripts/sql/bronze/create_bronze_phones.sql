@@ -32,7 +32,7 @@ create external table if not exists c2dwh_bronze.phones (
 	network string,
 	ports string
 )
-partitioned by (date date)
+partitioned by (partition_date string)
 row format serde 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
 with serdeproperties (
 	'separatorChar' = ',',

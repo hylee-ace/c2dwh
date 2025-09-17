@@ -258,10 +258,10 @@ def s3_file_uploader(
         return
 
     # get aws credentials
-    with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
+    with open("/home/jh97/MyWorks/Documents/.aws_iam_token.json", "r") as file:
         content = json.load(file)
-        key_id = content["access_key"]
-        secret_key = content["secrect_access_key"]
+        key_id = content["aws_access_key_id"]
+        secret_key = content["aws_secret_access_key"]
 
     # initialize client
     if not client:
@@ -297,10 +297,10 @@ def athena_sql_executor(
     )
 
     # get aws credentials
-    with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
+    with open("/home/jh97/MyWorks/Documents/.aws_iam_token.json", "r") as file:
         content = json.load(file)
-        key_id = content["access_key"]
-        secret_key = content["secrect_access_key"]
+        key_id = content["aws_access_key_id"]
+        secret_key = content["aws_secret_access_key"]
 
     # initialize client
     if not client:
@@ -349,7 +349,7 @@ def athena_sql_executor(
             "CANCELLED",
         ]:
             print(
-                f'Execution {data["query_execution_state"]} with error >>',
+                f'Execution {colorized(data["query_execution_state"],31)} >>',
                 execution["QueryExecution"]["Status"]
                 .get("AthenaError", {})
                 .get("ErrorMessage"),
@@ -359,7 +359,7 @@ def athena_sql_executor(
             if is_select:
                 break
             else:
-                print(f'Execution {data["query_execution_state"]}.')
+                print(f'Execution {colorized(data["query_execution_state"],32)}.')
                 return data
 
         time.sleep(0.2)
@@ -397,10 +397,10 @@ def s3_folder_cleaner(
     """
 
     # get aws credentials
-    with open("/home/jh97/MyWorks/Documents/.aws_cdt.json", "r") as file:
+    with open("/home/jh97/MyWorks/Documents/.aws_iam_token.json", "r") as file:
         content = json.load(file)
-        key_id = content["access_key"]
-        secret_key = content["secrect_access_key"]
+        key_id = content["aws_access_key_id"]
+        secret_key = content["aws_secret_access_key"]
 
     # initialize client
     if not client:

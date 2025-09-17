@@ -64,10 +64,10 @@ insert into c2dwh_silver.watches with temp as(
 				when material = '' then null else material
 			end material,
 			row_number() over(
-				partition by sku
+				partition by sku, partition_date
 				order by updated_at desc
 			) latest,
-			date
+			partition_date
 		from c2dwh_bronze.watches
 	)
 select sku,
@@ -92,8 +92,8 @@ select sku,
 	release_year,
 	release_month,
 	updated_at,
-	date
+	partition_date
 from temp
 where latest = 1
-	and date = current_date
+	and partition_date = cast(current_date as varchar)
 order by sku

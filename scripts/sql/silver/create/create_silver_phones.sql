@@ -11,8 +11,8 @@ create external table if not exists c2dwh_silver.phones (
 	gpu string,
 	ram_gb double,
 	storage_gb double,
-	rear_cam_mp string,
-	front_cam_mp string,
+	cam_res_rear string,
+	cam_res_front string,
 	screen_type string,
 	screen_size_inch_main double,
 	screen_size_inch_sub double,
@@ -38,7 +38,7 @@ create external table if not exists c2dwh_silver.phones (
 	release_month int,
 	updated_at timestamp
 )
-partitioned by (date date)
+partitioned by (partition_date string)
 stored as parquet
 location 's3://crawling-to-dwh/silver/phones/'
 tblproperties ('parquet.compression' = 'SNAPPY');

@@ -1,4 +1,4 @@
-import asyncio, os, time, re
+import asyncio, os, re
 from webcrawler import Crawler, Scraper
 from utils import runtime, csv_reader, athena_sql_executor
 from datetime import datetime
@@ -75,8 +75,8 @@ def create_tables_from_files(
                 queries.append(file.read())
 
     for i in queries:
-        table = re.search(r"if not exists\s*(.*?)\s*\(", i)
-        bucket = re.search(r"location\s*'(s3://.*?)'", i)
+        table = re.search(r"table (?:if not exists)?\s*(.*?)\s*\(", i, re.IGNORECASE)
+        bucket = re.search(r"location\s*'(s3://.*?)'", i, re.IGNORECASE)
         tables_meta.append(
             (table.group(1) if table else "", bucket.group(1) if bucket else "")
         )
@@ -90,9 +90,9 @@ def create_tables_from_files(
         resp = athena_sql_executor(queries[i], database=database)
 
         if resp.get("query_execution_state") == "SUCCEEDED":
-            print(f"Create {tables_meta[i][0]} successfully.")
+            print(f"Create table {tables_meta[i][0]} successfully.")
         else:
-            print(f"Cannot create table {tables_meta[i][0]}.")
+            print(f"Creating table {tables_meta[i][0]} canceled.")
 
     if update_partition:
         for i in tables_meta:
@@ -105,16 +105,51 @@ def create_tables_from_files(
             if resp.get("query_execution_state") == "SUCCEEDED":
                 print(f"Update partition in {i[0]} successfully.")
             else:
-                print(f"Cannot update partition in {i[0]}.")
+                print(f"Updating partition in {i[0]} canceled.")
+
+
+def bulk_insert_from_files(files_location: str, *, database: str):
+    queries = []
+    tables = []
+
+    if os.path.isfile(files_location):
+        print(f"Invalid path. {files_location} is a file.")
+        return
+    if not os.path.exists(files_location):
+        print(f"No such directory named {files_location}.")
+        return
+
+    for root, _, files in os.walk(files_location):
+        for i in files:
+            if not i.endswith(".sql"):  # only read sql files
+                continue
+            with open(os.path.join(root, i), "r") as file:
+                queries.append(file.read())
+
+    for i in queries:
+        table = re.search(r"insert into\s+([^\s]*?)\s+", i, re.IGNORECASE)
+        tables.append(table.group(1) if table else "")
+
+    if not queries:
+        print("No SQL queries found.")
+        return
+
+    print(f"Start processing records and updating tables in {database}...")
+    for i in range(len(queries)):
+        resp = athena_sql_executor(queries[i], database=database)
+
+        if resp.get("query_execution_state") == "SUCCEEDED":
+            print(f"Add new processed records into {tables[i]} successfully.")
+        else:
+            print(f"Updating table {tables[i]} canceled.")
 
 
 @runtime
 def main():
     # crawling_work(upload_to_s3=True)
     # scraping_work(upload_to_s3=True)
-    create_tables_from_files(
-        "./scripts/sql/bronze", database="c2dwh_bronze", update_partition=True
-    )
+    create_tables_from_files("./scripts/sql/silver/create", database="c2dwh_silver")
+    # bulk_insert_from_files("./scripts/sql/silver/insert", database="c2dwh_silver")
 
 
 if __name__ == "__main__":

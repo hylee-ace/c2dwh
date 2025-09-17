@@ -22,7 +22,7 @@ create external table if not exists c2dwh_silver.watches(
 	release_month int,
 	updated_at timestamp
 )
-partitioned by (date date)
+partitioned by (partition_date string)
 stored as parquet
 location 's3://crawling-to-dwh/silver/watches/'
 tblproperties ('parquet.compression' = 'SNAPPY')

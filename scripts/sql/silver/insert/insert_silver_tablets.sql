@@ -52,14 +52,14 @@ insert into c2dwh_silver.tablets with temp as(
 					regexp_extract_all(rearcam_specs, '\d+\.?\d*\s*MP'),
 					' + '
 				) else null
-			end rear_cam_mp,
+			end cam_res_rear,
 			case
 				regexp_like(frontcam_specs, 'MP')
 				when true then array_join(
 					regexp_extract_all(frontcam_specs, '\d+\.?\d*\s*MP'),
 					' + '
 				) else null
-			end front_cam_mp,
+			end cam_res_front,
 			cast(
 				regexp_extract(screen_size, '\d+\.?\d*') as double
 			) screen_size_inch,
@@ -91,10 +91,10 @@ insert into c2dwh_silver.tablets with temp as(
 				when ports = '' then null else regexp_replace(ports, '(3.5\s*mm)', 'Jack $1')
 			end ports,
 			row_number() over(
-				partition by sku
+				partition by sku, partition_date
 				order by updated_at desc
 			) latest,
-			date
+			partition_date
 		from c2dwh_bronze.tablets
 	)
 select sku,
@@ -109,8 +109,8 @@ select sku,
 	gpu,
 	ram_gb,
 	storage_gb,
-	rear_cam_mp,
-	front_cam_mp,
+	cam_res_rear,
+	cam_res_front,
 	screen_size_inch,
 	screen_panel,
 	screen_res_px,
@@ -128,8 +128,8 @@ select sku,
 	release_year,
 	release_month,
 	updated_at,
-	date
+	partition_date
 from temp
 where latest = 1
-	and date = current_date -- this filter to ensure athena not recreate all partition in s3
+	and partition_date = cast(current_date as varchar) -- this filter to ensure athena not recreate all partition in s3
 order by sku

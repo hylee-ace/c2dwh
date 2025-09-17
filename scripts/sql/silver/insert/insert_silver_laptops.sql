@@ -140,10 +140,10 @@ insert into c2dwh_silver.laptops with temp as(
 			end release_month,
 			cast(updated_at as timestamp) updated_at,
 			row_number() over(
-				partition by sku
+				partition by sku, partition_date
 				order by updated_at desc
 			) latest,
-			date
+			partition_date
 		from c2dwh_bronze.laptops
 	)
 select sku,
@@ -185,8 +185,8 @@ select sku,
 	release_year,
 	release_month,
 	updated_at,
-	date
+	partition_date
 from temp
 where latest = 1
-	and date = current_date -- this filter to ensure athena not recreate all partition in s3
+	and partition_date = cast(current_date as varchar) -- this filter to ensure athena not recreate all partition in s3
 order by sku

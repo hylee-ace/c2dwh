@@ -54,102 +54,15 @@ def scraping_work(upload_to_s3: bool = False):
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
 
-def create_tables_from_files(
-    files_location: str, *, database: str, update_partition: bool = False
-):
-    queries = []
-    tables_meta = []
-
-    if os.path.isfile(files_location):
-        print(f"Invalid path. {files_location} is a file.")
-        return
-    if not os.path.exists(files_location):
-        print(f"No such directory named {files_location}.")
-        return
-
-    for root, _, files in os.walk(files_location):
-        for i in files:
-            if not i.endswith(".sql"):  # only read sql files
-                continue
-            with open(os.path.join(root, i), "r") as file:
-                queries.append(file.read())
-
-    for i in queries:
-        table = re.search(r"table (?:if not exists)?\s*(.*?)\s*\(", i, re.IGNORECASE)
-        bucket = re.search(r"location\s*'(s3://.*?)'", i, re.IGNORECASE)
-        tables_meta.append(
-            (table.group(1) if table else "", bucket.group(1) if bucket else "")
-        )
-
-    if not queries:
-        print("No SQL queries found.")
-        return
-
-    print(f"Start creating tables in {database}...")
-    for i in range(len(queries)):
-        resp = athena_sql_executor(queries[i], database=database)
-
-        if resp.get("query_execution_state") == "SUCCEEDED":
-            print(f"Create table {tables_meta[i][0]} successfully.")
-        else:
-            print(f"Creating table {tables_meta[i][0]} canceled.")
-
-    if update_partition:
-        for i in tables_meta:
-            resp = athena_sql_executor(
-                f"alter table {i[0]} add partition (partition_date = '{datetime.today().date()}') "
-                + f"location '{i[1]}date={datetime.today().date()}'",
-                database=database,
-            )
-
-            if resp.get("query_execution_state") == "SUCCEEDED":
-                print(f"Update partition in {i[0]} successfully.")
-            else:
-                print(f"Updating partition in {i[0]} canceled.")
-
-
-def bulk_insert_from_files(files_location: str, *, database: str):
-    queries = []
-    tables = []
-
-    if os.path.isfile(files_location):
-        print(f"Invalid path. {files_location} is a file.")
-        return
-    if not os.path.exists(files_location):
-        print(f"No such directory named {files_location}.")
-        return
-
-    for root, _, files in os.walk(files_location):
-        for i in files:
-            if not i.endswith(".sql"):  # only read sql files
-                continue
-            with open(os.path.join(root, i), "r") as file:
-                queries.append(file.read())
-
-    for i in queries:
-        table = re.search(r"insert into\s+([^\s]*?)\s+", i, re.IGNORECASE)
-        tables.append(table.group(1) if table else "")
-
-    if not queries:
-        print("No SQL queries found.")
-        return
-
-    print(f"Start processing records and updating tables in {database}...")
-    for i in range(len(queries)):
-        resp = athena_sql_executor(queries[i], database=database)
-
-        if resp.get("query_execution_state") == "SUCCEEDED":
-            print(f"Add new processed records into {tables[i]} successfully.")
-        else:
-            print(f"Updating table {tables[i]} canceled.")
-
-
 @runtime
 def main():
     # crawling_work(upload_to_s3=True)
     # scraping_work(upload_to_s3=True)
-    create_tables_from_files("./scripts/sql/silver/create", database="c2dwh_silver")
-    # bulk_insert_from_files("./scripts/sql/silver/insert", database="c2dwh_silver")
+    """
+    alter table c2dwh_bronze.earphones
+    add if not exists partition(partition_date = '2025-09-09')
+        location 's3://crawling-to-dwh/bronze/earphones/date=2025-09-09/'
+    """
 
 
 if __name__ == "__main__":

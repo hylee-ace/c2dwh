@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: AwsDataCatalog
+    schema: c2dwh_bronze
+    tables:
+      - name: phones
+      - name: laptops
+      - name: tablets
+      - name: watches
+      - name: earphones
+      - name: screens

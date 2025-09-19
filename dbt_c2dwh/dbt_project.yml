@@ -17,15 +17,17 @@ clean-targets:
 models:
   dbt_c2dwh:
     silver:
-      +materialized: incremental # upsert every runs
+      +materialized: incremental # upsert table every runs
       +file_format: parquet
       +tblproperties:
         parquet.compression: SNAPPY
         classification: parquet
+      +schema: c2dwh_silver # database in athena
 
     gold:
-      +materialized: table # renew every runs
+      +materialized: table # recreate table every runs
       +file_format: parquet
       +tblproperties:
         parquet.compression: SNAPPY
         classification: parquet
+      +schema: c2dwh_gold

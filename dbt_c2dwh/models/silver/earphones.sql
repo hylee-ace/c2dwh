@@ -1,7 +1,7 @@
 {{
   config(
-    partitioned_by=['partition_date'],
-    external_location='s3://crawling-to-dwh/silver/earphones/',
+    partitioned_by = ['partition_date'],
+    external_location = 's3://crawling-to-dwh/silver/earphones/',
     )
 }}
 
@@ -10,7 +10,7 @@ with temp as(
         trim(
             regexp_replace(
                 name,
-                'Tai (N|n)ghe|Bluetooth|(C|c)hụp (T|t)ai|Gaming|Open\s?-\s?Ear|True Wireless|(T|t)hể thao|Có (D|d)ây|truyền âm thanh qua không khí|truyền xương|dẫn khí truyền âm',
+                '(?i)tai nghe|bluetooth|chụp tai|gaming|open\s?-\s?ear|true wireless|thể thao|có dây|truyền âm thanh qua không khí|truyền xương|dẫn khí truyền âm',
                 ''
             )
         ) name,
@@ -120,6 +120,5 @@ select sku,
 	updated_at,
 	partition_date
 from temp
-where latest = 1 and partition_date in('2025-09-09','2025-09-17')
-	{# and partition_date = cast(current_date as varchar) -- this filter to ensure athena not recreate all partition in s3 #}
+where latest = 1 and partition_date = cast(current_date as varchar) -- this filter to ensure athena not recreate all partition in s3
 order by sku

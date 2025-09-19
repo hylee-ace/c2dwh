@@ -1,7 +1,7 @@
 {{
   config(
-    partitioned_by=['partition_date'],
-    external_location='s3://crawling-to-dwh/silver/watches/',
+    partitioned_by = ['partition_date'],
+    external_location = 's3://crawling-to-dwh/silver/watches/',
     )
 }}
 
@@ -101,6 +101,5 @@ select sku,
 	updated_at,
 	partition_date
 from temp
-where latest = 1 and partition_date in('2025-09-09','2025-09-17')
-	{# and partition_date = cast(current_date as varchar) #}
+where latest = 1 and partition_date = cast(current_date as varchar)
 order by sku

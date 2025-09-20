@@ -1,0 +1,9 @@
+select a.brand,
+	round(avg(b.rating), 2) avg_rating,
+	sum(b.reviews_count) total_reviews,
+	cast(current_timestamp as timestamp) last_update
+from {{ ref('dim_product') }} a
+	left join {{ ref('fact_reviews') }} b on a.sku = b.product_sku
+group by a.brand
+order by avg_rating desc,
+	total_reviews desc

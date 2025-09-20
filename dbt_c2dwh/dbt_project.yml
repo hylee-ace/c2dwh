@@ -16,7 +16,7 @@ clean-targets:
 
 models:
   dbt_c2dwh:
-    silver:
+    silver: # staging layer
       +materialized: incremental # upsert table every runs
       +file_format: parquet
       +tblproperties:
@@ -30,4 +30,8 @@ models:
       +tblproperties:
         parquet.compression: SNAPPY
         classification: parquet
+      +schema: c2dwh_gold
+
+    marts:
+      +materialized: view # recreate view every runs
       +schema: c2dwh_gold

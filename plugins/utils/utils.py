@@ -337,7 +337,7 @@ def athena_sql_executor(
             "CANCELLED",
         ]:
             print(
-                f'Execution {colorized(data["query_execution_state"],31)} >>',
+                f'Execution {data["query_execution_state"]} >>',
                 execution["QueryExecution"]["Status"]
                 .get("AthenaError", {})
                 .get("ErrorMessage"),
@@ -347,7 +347,7 @@ def athena_sql_executor(
             if is_select:
                 break
             else:
-                print(f'Execution {colorized(data["query_execution_state"],32)}.')
+                print(f'Execution {data["query_execution_state"]}.')
                 return data
 
         time.sleep(0.2)

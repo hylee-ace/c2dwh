@@ -154,28 +154,53 @@ with DAG(
     # schedule="0 22 * SEP-DEC SUN",  # dont set when manually testing
     catchup=False,
 ):
-    # crawling_task = PythonOperator(
-    #     task_id="crawl_tgdd",
-    #     python_callable=crawling_work,
-    #     op_args=[True],
-    #     retries=3,
-    #     retry_delay=timedelta(minutes=3),
-    # )
-    # scraping_task = PythonOperator(
-    #     task_id="scrape_urls",
-    #     python_callable=scraping_work,
-    #     op_args=[True],
-    #     retries=3,
-    #     retry_delay=timedelta(minutes=3),
-    # )
-    # delay = TimeDeltaSensor(task_id="delay", delta=timedelta(seconds=60))
-    # checker = ShortCircuitOperator(task_id="check_urls", python_callable=check_records)
+    # extract
+    crawling_task = PythonOperator(
+        task_id="crawl_tgdd",
+        python_callable=crawling_work,
+        op_args=[True],
+        retries=3,
+        retry_delay=timedelta(minutes=3),
+    )
+    scraping_task = PythonOperator(
+        task_id="scrape_urls",
+        python_callable=scraping_work,
+        op_args=[True],
+        retries=3,
+        retry_delay=timedelta(minutes=3),
+    )
+    delay = TimeDeltaSensor(task_id="delay", delta=timedelta(seconds=60))
+    checker = ShortCircuitOperator(task_id="check_urls", python_callable=check_records)
+
+    # load
     bronze_tier_task = PythonOperator(
-        task_id="build_bronze_layer",
+        task_id="build_staging_layer",
         python_callable=build_bronze_layer,
         retries=3,
         retry_delay=timedelta(seconds=30),
         retry_exponential_backoff=True,  # wait longer after each retry
     )
 
-    bronze_tier_task
+    # transform
+    silver_tier_task = BashOperator(
+        task_id="clean_staging_data",
+        bash_command="cd /home/dbt_c2dwh && dbt run -s models/silver",
+        retries=3,
+        retry_delay=timedelta(seconds=30),
+    )
+    gold_tier_task = BashOperator(
+        task_id="define_olap_schema",
+        bash_command="cd /home/dbt_c2dwh && dbt run -s models/gold",
+        retries=3,
+        retry_delay=timedelta(seconds=30),
+    )
+    creating_marts_task = BashOperator(
+        task_id="create_data_marts",
+        bash_command="cd /home/dbt_c2dwh && dbt run -s models/marts",
+        retries=3,
+        retry_delay=timedelta(seconds=30),
+    )
+
+    # workflow
+    crawling_task >> checker >> delay >> scraping_task >> bronze_tier_task
+    bronze_tier_task >> silver_tier_task >> gold_tier_task >> creating_marts_task

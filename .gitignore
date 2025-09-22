@@ -212,3 +212,4 @@ dbt_c2dwh/target/
 dbt_c2dwh/dbt_packages/
 dbt_c2dwh/logs/
 config/
+prototype/

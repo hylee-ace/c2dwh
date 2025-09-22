@@ -1,7 +1,7 @@
 import httpx, json, asyncio, os, re
-from .crawler import Crawler
-from .models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphones, Screen
-from utils import colorized, dict_to_csv, s3_file_uploader
+from crawler import Crawler
+from models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphones, Screen
+from utils.utils import dict_to_csv, s3_file_uploader
 from py_mini_racer import MiniRacer
 from urllib.parse import urlparse
 from datetime import datetime
@@ -764,9 +764,9 @@ class Scraper:
 
         print("Scraping successfully.")
         print(
-            f"From: {colorized(cls.__retailer,34)}",
-            f"Scraped: {colorized(len(cls.__scraped),33)}",
-            f"Valid: {colorized(len(cls.result),32)}",
+            f"From: {cls.__retailer}",
+            f"Scraped: {len(cls.__scraped)}",
+            f"Valid: {len(cls.result)}",
             sep=" | ",
         )
 

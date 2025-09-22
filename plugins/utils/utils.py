@@ -1,4 +1,4 @@
-import threading, time, functools, inspect, os, csv, boto3, json, re
+import threading, time, functools, inspect, os, csv, boto3, re
 from botocore.exceptions import ClientError as AwsClientError
 from botocore.client import BaseClient
 
@@ -257,19 +257,13 @@ def s3_file_uploader(
         print(f"Invalid path. {path} is a directory.")
         return
 
-    # get aws credentials
-    with open("/home/jh97/MyWorks/Documents/.aws_iam_token.json", "r") as file:
-        content = json.load(file)
-        key_id = content["aws_access_key_id"]
-        secret_key = content["aws_secret_access_key"]
-
     # initialize client
     if not client:
         client = boto3.client(
             "s3",
             region_name="us-east-1",
-            aws_access_key_id=key_id,
-            aws_secret_access_key=secret_key,
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
 
     try:
@@ -296,19 +290,13 @@ def athena_sql_executor(
         else False
     )
 
-    # get aws credentials
-    with open("/home/jh97/MyWorks/Documents/.aws_iam_token.json", "r") as file:
-        content = json.load(file)
-        key_id = content["aws_access_key_id"]
-        secret_key = content["aws_secret_access_key"]
-
     # initialize client
     if not client:
         client = boto3.client(
             "athena",
             region_name="us-east-1",
-            aws_access_key_id=key_id,
-            aws_secret_access_key=secret_key,
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
 
     # execute the query

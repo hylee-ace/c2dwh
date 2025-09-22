@@ -1,16 +1,139 @@
 from airflow.sdk import DAG
-from datetime import datetime, timedelta
 from airflow.providers.standard.operators.bash import BashOperator
-from airflow.providers.standard.operators.python import PythonOperator
-import pendulum, logging
-from utils import s3_folder_cleaner
+from airflow.providers.standard.operators.python import (
+    PythonOperator,
+    ShortCircuitOperator,
+)
+from airflow.providers.standard.sensors.time_delta import TimeDeltaSensor
+from datetime import datetime, timedelta
+from utils.utils import csv_reader, athena_sql_executor
+from webcrawler.crawler import Crawler
+from webcrawler.scraper import Scraper
+import pendulum, asyncio, os, re
 
-log = logging.getLogger()
+
+def crawling_work(upload_to_s3: bool = False):
+    print("Start crawling process...")
+
+    include = [
+        ("laptop", 7),
+        ("dtdd", 5),
+        ("dong-ho-thong-minh", 19),
+        ("man-hinh-may-tinh", 18),
+        ("may-tinh-bang", 14),
+        ("tai-nghe", 9),
+    ]
+    text = " or ".join([f"substring(@href,1,{i[1]})='/{i[0]}'" for i in include])
+    crawler = Crawler(
+        "https://www.thegioididong.com/",
+        search=f"//a[{text}]/@href",
+        save_in="/home/data/crawled",
+        upload_to_s3=upload_to_s3,
+        s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "crawled/"},
+    )
+
+    asyncio.run(
+        crawler.execute(
+            timeout=20.0,
+            chunksize=11,
+            semaphore=asyncio.Semaphore(11),
+        )
+    )
+    crawler.reset()
 
 
-def test():
-    s3_folder_cleaner(bucket='c2dwh-athena-queries')
-    
+def scraping_work(upload_to_s3: bool = False):
+    print("Start scraping process...")
+
+    urls = [i["url"] for i in csv_reader("/home/data/crawled/thegioididong_urls.csv")]
+    scraper = Scraper(
+        urls,
+        save_in="/home/data/scraped",
+        upload_to_s3=upload_to_s3,
+        s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "bronze/"},
+    )
+
+    asyncio.run(
+        scraper.execute(
+            timeout=20.0,
+            chunksize=11,
+            semaphore=asyncio.Semaphore(11),
+        )
+    )
+    scraper.reset()
+
+
+def check_records():
+    res = csv_reader("/home/data/crawled/thegioididong_urls.csv")
+
+    if not res:  # empty file
+        return False
+
+    for i in res:
+        if (
+            i.get("created_at")
+            and datetime.fromisoformat(i.get("created_at")).date()
+            == datetime.today().date()
+        ):
+            return True
+
+    return False
+
+
+def build_bronze_layer():
+    files_location = "/opt/airflow/plugins/sql"
+    database = "c2dwh_bronze"
+    queries = []
+    tables_meta = []
+
+    if os.path.isfile(files_location):
+        print(f"Invalid path. {files_location} is a file.")
+        return
+    if not os.path.exists(files_location):
+        print(f"No such directory named {files_location}.")
+        return
+
+    for root, _, files in os.walk(files_location):
+        for i in files:
+            if not i.endswith(".sql"):  # only read sql files
+                continue
+            with open(os.path.join(root, i), "r") as file:
+                queries.append(file.read())
+
+    # extract metadata
+    for i in queries:
+        table = re.search(r"if not exists\s*(.*?)\s*\(", i)
+        bucket = re.search(r"location\s*'(s3://.*?)'", i)
+        tables_meta.append(
+            (table.group(1) if table else "", bucket.group(1) if bucket else "")
+        )
+
+    if not queries:
+        print("No SQL queries found.")
+        return
+
+    print(f"Start creating tables in {database}...")
+    for i in range(len(queries)):
+        resp = athena_sql_executor(queries[i], database=database)
+
+        if resp.get("query_execution_state") == "SUCCEEDED":
+            print(f"Create {tables_meta[i][0]} successfully.")
+        else:
+            print(f"Cannot create table {tables_meta[i][0]}.")
+
+    # update partitions
+    print("Start adding tables partition...")
+    for i in tables_meta:
+        resp = athena_sql_executor(
+            f"alter table {i[0]} add partition (partition_date = '{datetime.today().date()}') "
+            + f"location '{i[1]}date={datetime.today().date()}'",
+            database=database,
+        )
+
+        if resp.get("query_execution_state") == "SUCCEEDED":
+            print(f"Update partition in {i[0]} successfully.")
+        else:
+            print(f"Cannot update partition in {i[0]}.")
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
@@ -28,16 +151,31 @@ with DAG(
     },
     start_date=datetime(2025, 9, 1, 7, 0, tzinfo=local_tz),
     end_date=datetime(2025, 12, 31, 7, 0, tzinfo=local_tz),
-    schedule="0 22 * SEP-DEC SUN",
+    # schedule="0 22 * SEP-DEC SUN",  # dont set when manually testing
     catchup=False,
-) as dag:
-
-    task1 = PythonOperator(
-        task_id="test-py-def",
-        dag=dag,
-        python_callable=test,
+):
+    # crawling_task = PythonOperator(
+    #     task_id="crawl_tgdd",
+    #     python_callable=crawling_work,
+    #     op_args=[True],
+    #     retries=3,
+    #     retry_delay=timedelta(minutes=3),
+    # )
+    # scraping_task = PythonOperator(
+    #     task_id="scrape_urls",
+    #     python_callable=scraping_work,
+    #     op_args=[True],
+    #     retries=3,
+    #     retry_delay=timedelta(minutes=3),
+    # )
+    # delay = TimeDeltaSensor(task_id="delay", delta=timedelta(seconds=60))
+    # checker = ShortCircuitOperator(task_id="check_urls", python_callable=check_records)
+    bronze_tier_task = PythonOperator(
+        task_id="build_bronze_layer",
+        python_callable=build_bronze_layer,
+        retries=3,
+        retry_delay=timedelta(seconds=30),
+        retry_exponential_backoff=True,  # wait longer after each retry
     )
 
-    test2 = BashOperator(task_id="test-bash", dag=dag, bash_command="echo hello word")
-
-    task1
+    bronze_tier_task

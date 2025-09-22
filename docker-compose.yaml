@@ -24,6 +24,7 @@ x-airflow-common: &airflow-common
     - ./plugins:/opt/airflow/plugins
     - ~/.dbt:/root/.dbt # the dbt profile.yml
     - ./data:/home/data # the crawled and scraped data
+    - ./dbt_c2dwh:/home/dbt_c2dwh # dbt project for olap
   user: "${AIRFLOW_UID}:0"
   depends_on: &airflow-common-depends-on
     redis:
@@ -34,7 +35,7 @@ x-airflow-common: &airflow-common
 services:
   postgres:
     image: postgres:15
-    container_name: pg-airflow
+    container_name: pg-airflow # simplified name
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -54,6 +55,7 @@ services:
 
   redis:
     image: redis:7.2-bookworm
+    container_name: redis-airflow # simplified name
     expose:
       - 6379
     healthcheck:
@@ -67,6 +69,7 @@ services:
   airflow-apiserver:
     <<: *airflow-common
     command: api-server
+    container_name: apiserver # simplified name
     ports:
       - "8080:8080"
     healthcheck:
@@ -84,6 +87,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    container_name: scheduler # simplified name
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
       interval: 30s
@@ -99,6 +103,7 @@ services:
   airflow-dag-processor:
     <<: *airflow-common
     command: dag-processor
+    container_name: dag-processor # simplified name
     healthcheck:
       test:
         [
@@ -118,6 +123,7 @@ services:
   airflow-worker:
     <<: *airflow-common
     command: celery worker
+    container_name: worker # simplified name
     healthcheck:
       test:
         - "CMD-SHELL"
@@ -140,6 +146,7 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
+    container_name: triggerer # simplified name
     healthcheck:
       test:
         [
@@ -159,6 +166,7 @@ services:
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
+    container_name: airflow-init # simplified name
     command:
       - -c
       - |

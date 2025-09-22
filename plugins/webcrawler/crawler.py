@@ -1,5 +1,5 @@
 import asyncio, httpx, os, re
-from utils import colorized, dict_to_csv, s3_file_uploader
+from utils.utils import dict_to_csv, s3_file_uploader
 from lxml import html
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
@@ -127,7 +127,7 @@ class Crawler:
                     print(f"Inspecting {url} failed >> {e}")
                     return
                 except (httpx.RequestError, httpx.TimeoutException) as e:
-                    print(f"{repr(e)}. Retry after {retry_delay}sec...")
+                    print(f"{repr(e)} - {url}. Retry after {retry_delay} sec...")
                     last_exception = e
                     await asyncio.sleep(retry_delay)
 
@@ -326,9 +326,9 @@ class Crawler:
 
         print("Crawling successfully.")
         print(
-            f"From: {colorized( cls.base_url,34)}",
-            f"Crawled: {colorized(len(cls.__crawled),33)}",
-            f"Valid: {colorized(len(cls.result),32)} {text if cls.__history else ''}",
+            f"From: {cls.base_url}",
+            f"Crawled: {len(cls.__crawled)}",
+            f"Valid: {len(cls.result)} {text if cls.__history else ''}",
             sep=" | ",
         )
 

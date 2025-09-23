@@ -1,8 +1,7 @@
-import httpx, json, asyncio, os, re
+import httpx, json, asyncio, os, re, logging
 from crawler import Crawler
 from models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphones, Screen
 from utils.utils import dict_to_csv, s3_file_uploader
-from py_mini_racer import MiniRacer
 from urllib.parse import urlparse
 from datetime import datetime
 from dataclasses import asdict
@@ -20,6 +19,12 @@ class Scraper:
         The website that going to be scraped, currently support **cellphones** and **tgdd**
     save_in: str, optional
         Directory for saved output (default: **None**).
+    upload_to_s3: bool, optional
+        For uploading result file to AWS S3 bucket (default: **False**).
+    s3_attrs: dict, optional
+        Provide S3 attributes such as **client** (optional), **bucket** and **obj_prefix** for uploading (default: **None**).
+    log: logger, optional
+        For logging
     """
 
     __retailer = None
@@ -31,6 +36,7 @@ class Scraper:
     upload_to_s3 = False
     s3_attrs = dict()
     __lock = asyncio.Lock()
+    logger = None  # for logging
 
     def __init__(
         self,
@@ -39,6 +45,7 @@ class Scraper:
         save_in: str = None,
         upload_to_s3: bool = False,
         s3_attrs: dict | None = None,
+        log: logging.Logger | None = None,
     ):
         Scraper.__queue.update(urls)
         Scraper.__retailer = "".join(
@@ -49,17 +56,27 @@ class Scraper:
             ]
         ).upper()
 
+        if not log:
+            logging.basicConfig(
+                format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+                level=10,
+            )
+            Scraper.logger = logging.getLogger("scraper")
+        else:
+            Scraper.logger = log
+
         if save_in:
             Scraper.saving_dir = save_in
 
         if upload_to_s3:
             if not save_in:
-                print(
+                Scraper.logger.error(
                     "Cannot locate output file for uploading since 'save_in' is missing."
                 )
                 exit(1)
             if not s3_attrs:  # not provide s3 attributes
-                print(
+                Scraper.logger.error(
                     "S3 attributes such as client (optional), bucket and obj_prefix are required."
                 )
                 exit(1)
@@ -69,43 +86,11 @@ class Scraper:
                     for i in s3_attrs.keys()
                 ]
             ):  # giving invalid attrs
-                print("Invalid S3 attributes.")
+                Scraper.logger.error("Invalid S3 attributes.")
                 exit(1)
 
             Scraper.upload_to_s3 = upload_to_s3
             Scraper.s3_attrs = s3_attrs
-
-    @staticmethod
-    async def nuxt_to_data(
-        url: str,
-        *,
-        client: httpx.AsyncClient = None,
-        semaphore: asyncio.Semaphore = None,
-        encoding: str = None,
-    ):
-        """
-        Extract data from Nuxt.js-based HTML by JS runner.
-        """
-
-        nuxt = await Crawler.async_inspect(
-            url,
-            client=client,
-            xpath="//script[not(@*) and contains(.,'window.__NUXT__')]/text()",
-            semaphore=semaphore,
-            encoding=encoding,
-        )
-
-        if not nuxt:
-            return
-
-        # prepare JS runner
-        js_runner = MiniRacer()
-        js_runner.eval("var window = {};")
-        js_runner.eval(nuxt[0])
-        data = js_runner.eval("JSON.stringify(window.__NUXT__)")
-
-        # load to json
-        return json.loads(data)
 
     def __parse_common_info(data: dict):
         prd = ProductInfo(
@@ -566,6 +551,7 @@ class Scraper:
                 encoding="utf-8",
                 client=client,
                 semaphore=semaphore,
+                log=Scraper.logger,
             )
 
             # classify fetched data
@@ -587,7 +573,9 @@ class Scraper:
             full_data = json.loads(json_content[0])
             specs_data.extend(tags_content)
         except Exception:
-            print(f"{url} might be removed from the website. Check again.")
+            Scraper.logger.warning(
+                f"{url} might be removed from the website. Check again."
+            )
             async with Scraper.__lock:
                 Scraper.__scraped.add(url)
                 Scraper.__queue.discard(url)
@@ -676,7 +664,7 @@ class Scraper:
                 else:
                     Scraper.__saving_paths.update({path: 1})
 
-                dict_to_csv(asdict(product), path)
+                dict_to_csv(asdict(product), path=path, log=Scraper.logger)
 
     @classmethod
     async def execute(
@@ -754,20 +742,13 @@ class Scraper:
                 if delay:
                     await asyncio.sleep(delay)  # delay between chunks
 
-                print(
-                    f"From: {cls.__retailer}",
-                    f"Pending {len(cls.__queue)}",
-                    f"Scraped: {len(cls.__scraped)}",
-                    f"Valid: {len(cls.result)}",
-                    sep=" | ",
+                Scraper.logger.debug(
+                    f"From: {cls.__retailer} | Pending {len(cls.__queue)} | Scraped: {len(cls.__scraped)} | Valid: {len(cls.result)}",
                 )
 
-        print("Scraping successfully.")
-        print(
-            f"From: {cls.__retailer}",
-            f"Scraped: {len(cls.__scraped)}",
-            f"Valid: {len(cls.result)}",
-            sep=" | ",
+        Scraper.logger.info("Scraping successfully.")
+        Scraper.logger.info(
+            f"From: {cls.__retailer} | Scraped: {len(cls.__scraped)} | Valid: {len(cls.result)}"
         )
 
         # upload to s3 bucket
@@ -778,11 +759,15 @@ class Scraper:
             # uploading work
             def upload(file: str, bucket: str, key: str):
                 fname = os.path.basename(file)
-                print(f"Start uploading {fname} to {bucket}...")
+                Scraper.logger.info(f"Start uploading {fname} to {bucket}...")
                 s3_file_uploader(
-                    file, client=cls.s3_attrs.get("client"), bucket=bucket, key=key
+                    file,
+                    client=cls.s3_attrs.get("client"),
+                    bucket=bucket,
+                    key=key,
+                    log=Scraper.logger,
                 )
-                print(f"Uploading {fname} successfully.")
+                Scraper.logger.info(f"Uploading {fname} successfully.")
 
             for i in Scraper.__saving_paths:
                 filename = os.path.basename(i)
@@ -803,6 +788,8 @@ class Scraper:
         Reset scraper after use.
         """
 
+        Scraper.logger.info(f"Scraper for {Scraper.__retailer} reset.")
+
         if cls.saving_dir:
             cls.saving_dir = None
 
@@ -810,5 +797,3 @@ class Scraper:
         cls.__queue.clear()
         cls.__scraped.clear()
         cls.result.clear()
-
-        print(f"Scraper for {Scraper.__retailer} reset.")

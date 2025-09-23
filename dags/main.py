@@ -9,11 +9,15 @@ from datetime import datetime, timedelta
 from utils.utils import csv_reader, athena_sql_executor
 from webcrawler.crawler import Crawler
 from webcrawler.scraper import Scraper
-import pendulum, asyncio, os, re
+import pendulum, asyncio, os, re, logging
+
+
+log = logging.getLogger("airflow_task")
+local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 
 def crawling_work(upload_to_s3: bool = False):
-    print("Start crawling process...")
+    log.info("Start crawling process...")
 
     include = [
         ("laptop", 7),
@@ -30,6 +34,7 @@ def crawling_work(upload_to_s3: bool = False):
         save_in="/home/data/crawled",
         upload_to_s3=upload_to_s3,
         s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "crawled/"},
+        log=log,
     )
 
     asyncio.run(
@@ -43,7 +48,7 @@ def crawling_work(upload_to_s3: bool = False):
 
 
 def scraping_work(upload_to_s3: bool = False):
-    print("Start scraping process...")
+    log.info("Start scraping process...")
 
     urls = [i["url"] for i in csv_reader("/home/data/crawled/thegioididong_urls.csv")]
     scraper = Scraper(
@@ -51,6 +56,7 @@ def scraping_work(upload_to_s3: bool = False):
         save_in="/home/data/scraped",
         upload_to_s3=upload_to_s3,
         s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "bronze/"},
+        log=log,
     )
 
     asyncio.run(
@@ -64,7 +70,7 @@ def scraping_work(upload_to_s3: bool = False):
 
 
 def check_records():
-    res = csv_reader("/home/data/crawled/thegioididong_urls.csv")
+    res = csv_reader("/home/data/crawled/thegioididong_urls.csv", log=log)
 
     if not res:  # empty file
         return False
@@ -87,10 +93,10 @@ def build_bronze_layer():
     tables_meta = []
 
     if os.path.isfile(files_location):
-        print(f"Invalid path. {files_location} is a file.")
+        log.error(f"Invalid path. {files_location} is a file.")
         return
     if not os.path.exists(files_location):
-        print(f"No such directory named {files_location}.")
+        log.error(f"No such directory named {files_location}.")
         return
 
     for root, _, files in os.walk(files_location):
@@ -109,37 +115,36 @@ def build_bronze_layer():
         )
 
     if not queries:
-        print("No SQL queries found.")
+        log.warning("No SQL queries found.")
         return
 
-    print(f"Start creating tables in {database}...")
+    log.info(f"Start creating tables in {database}...")
     for i in range(len(queries)):
-        resp = athena_sql_executor(queries[i], database=database)
+        resp = athena_sql_executor(queries[i], database=database, log=log)
 
         if resp.get("query_execution_state") == "SUCCEEDED":
-            print(f"Create {tables_meta[i][0]} successfully.")
+            log.info(f"Create {tables_meta[i][0]} successfully.")
         else:
-            print(f"Cannot create table {tables_meta[i][0]}.")
+            log.error(f"Cannot create table {tables_meta[i][0]}.")
 
     # update partitions
-    print("Start adding tables partition...")
+    log.info("Start adding tables partition...")
     for i in tables_meta:
         resp = athena_sql_executor(
             f"alter table {i[0]} add partition (partition_date = '{datetime.today().date()}') "
             + f"location '{i[1]}date={datetime.today().date()}'",
             database=database,
+            log=log,
         )
 
         if resp.get("query_execution_state") == "SUCCEEDED":
-            print(f"Update partition in {i[0]} successfully.")
+            log.info(f"Update partition in {i[0]} successfully.")
         else:
-            print(f"Cannot update partition in {i[0]}.")
+            log.warning(f"Cannot update partition in {i[0]}.")
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 
-
-local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 with DAG(
     "c2dwh_elt_pipeline",

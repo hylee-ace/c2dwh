@@ -1,4 +1,4 @@
-import threading, time, functools, inspect, os, csv, boto3, re
+import threading, time, functools, inspect, os, csv, boto3, re, logging
 from botocore.exceptions import ClientError as AwsClientError
 from botocore.client import BaseClient
 
@@ -174,18 +174,28 @@ def timetext(second: int | float):
     return text
 
 
-def dict_to_csv(data: dict | list[dict], path: str):
+def dict_to_csv(
+    data: dict | list[dict], *, path: str, log: logging.Logger | None = None
+):
     """
     Save dict-type or list of dict-type data as CSV file.
     """
 
+    if not log:
+        logging.basicConfig(
+            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            level=10,
+        )
+        log = logging.getLogger("dict_to_csv")
+
     if path:
         if os.path.isdir(path):
-            print(f"Invalid path. {path} is a directory.")
+            log.error(f"Invalid path. {path} is a directory.")
             return
         os.makedirs(os.path.dirname(path), exist_ok=True)
     else:
-        print("Invalid path.")
+        log.error("Invalid path.")
         return
 
     mode = "a" if os.path.exists(path) and os.path.getsize(path) else "w"
@@ -201,11 +211,16 @@ def dict_to_csv(data: dict | list[dict], path: str):
             else:
                 writer.writerows(data)
     except Exception as e:
-        print(f"Saving to {path} failed >> {e}")
+        log.error(f"Saving to {path} failed >> {e}")
         return
 
 
-def csv_reader(path: str, *, fields: str | list[str] | None = None):
+def csv_reader(
+    path: str,
+    *,
+    fields: str | list[str] | None = None,
+    log: logging.Logger | None = None,
+):
     """
     Read CSV file and return list of dict-type data. Can extract by field names.
     """
@@ -213,8 +228,16 @@ def csv_reader(path: str, *, fields: str | list[str] | None = None):
     data = []
     header = []
 
+    if not log:
+        logging.basicConfig(
+            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            level=10,
+        )
+        log = logging.getLogger('csv_reader')
+
     if os.path.isdir(path):
-        print(f"Invalid path. {path} is a directory.")
+        log.error(f"Invalid path. {path} is a directory.")
         return
 
     if fields:
@@ -231,7 +254,7 @@ def csv_reader(path: str, *, fields: str | list[str] | None = None):
                     new = {}
                     for j in header:
                         if j not in reader.fieldnames:
-                            print(f"'{j}' does not exist in header.")
+                            log.error(f"'{j}' does not exist in header.")
                             return
                         new[j] = i[j]
                     data.append(new)
@@ -241,20 +264,33 @@ def csv_reader(path: str, *, fields: str | list[str] | None = None):
                 for i in reader:
                     data.append(i)
     except Exception as e:
-        print(f"Cannot read {path} >> {e}")
+        log.error(f"Cannot read {path} >> {e}")
     finally:
         return data
 
 
 def s3_file_uploader(
-    path: str, *, client: BaseClient | None = None, bucket: str, key: str
+    path: str,
+    *,
+    client: BaseClient | None = None,
+    bucket: str,
+    key: str,
+    log: logging.Logger | None = None,
 ):
     """
     Upload file to AWS S3 bucket basing on given key name.
     """
 
+    if not log:
+        logging.basicConfig(
+            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            level=10,
+        )
+        log = logging.getLogger('s3_file_uploader')
+
     if os.path.isdir(path):
-        print(f"Invalid path. {path} is a directory.")
+        log.error(f"Invalid path. {path} is a directory.")
         return
 
     # initialize client
@@ -269,7 +305,7 @@ def s3_file_uploader(
     try:
         client.upload_file(Filename=path, Bucket=bucket, Key=key)
     except AwsClientError as e:
-        print(f"Cannot upload {os.path.basename(path)} >> {e.response}")
+        log.error(f"Cannot upload {os.path.basename(path)} >> {e.response}")
 
 
 def athena_sql_executor(
@@ -279,10 +315,20 @@ def athena_sql_executor(
     database: str | None = None,
     output_location: str | None = None,
     encrypt_config: dict | None = None,
+    log: logging.Logger | None = None,
 ):
     """
     Execute SQL query on AWS Athena.
     """
+
+    if not log:
+        logging.basicConfig(
+            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            level=10,
+        )
+        log = logging.getLogger('athena_sql_executor')
+
     data = {}
     is_select = (
         True
@@ -322,7 +368,7 @@ def athena_sql_executor(
         )
         data["query_execution_id"] = resp["QueryExecutionId"]
     except AwsClientError as e:
-        print(f"Cannot execute the query >> {e.response}")
+        log.error(f"Cannot execute the query >> {e.response}")
         return data
 
     # wait for executing
@@ -336,7 +382,7 @@ def athena_sql_executor(
             "FAILED",
             "CANCELLED",
         ]:
-            print(
+            log.error(
                 f'Execution {data["query_execution_state"]} >>',
                 execution["QueryExecution"]["Status"]
                 .get("AthenaError", {})
@@ -347,7 +393,7 @@ def athena_sql_executor(
             if is_select:
                 break
             else:
-                print(f'Execution {data["query_execution_state"]}.')
+                log.info(f'Execution {data["query_execution_state"]}.')
                 return data
 
         time.sleep(0.2)
@@ -374,15 +420,28 @@ def athena_sql_executor(
                 }
             )
 
+    log.info(f'Execution {data["query_execution_state"]}.')
     return data
 
 
 def s3_folder_cleaner(
-    prefix: str | None = None, *, client: BaseClient | None = None, bucket: str
+    prefix: str | None = None,
+    *,
+    client: BaseClient | None = None,
+    bucket: str,
+    log: logging.Logger | None = None,
 ):
     """
     Free up AWS S3 bucket folder by prefix name. If prefix name is empty, everything in bucket will be removed.
     """
+
+    if not log:
+        logging.basicConfig(
+            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            level=10,
+        )
+        log = logging.getLogger('s3_folder_cleaner')
 
     # initialize client
     if not client:
@@ -401,6 +460,6 @@ def s3_folder_cleaner(
             objs = [{"Key": i["Key"]} for i in page["Contents"]]
             client.delete_objects(Bucket=bucket, Delete={"Objects": objs})
             for i in page["Contents"]:
-                print(f"Removed {i['Key']}.")
+                log.info(f"Removed {i['Key']}.")
     except AwsClientError as e:
-        print(f"Error occurs while cleaning {prefix if prefix else bucket} >> {e}")
+        log.error(f"Error occurs while cleaning {prefix if prefix else bucket} >> {e}")

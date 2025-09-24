@@ -22,7 +22,6 @@ x-airflow-common: &airflow-common
     - ./logs:/opt/airflow/logs
     - ./config:/opt/airflow/config
     - ./plugins:/opt/airflow/plugins
-    - ~/.dbt:/home/airflow/.dbt # the dbt profile.yml
     - ./data:/home/data # the crawled and scraped data
     - ./dbt_c2dwh:/home/dbt_c2dwh # dbt project for olap
   user: "${AIRFLOW_UID}:0"

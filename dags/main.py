@@ -72,7 +72,7 @@ def check_records():
     res = csv_reader("/home/data/crawled/thegioididong_urls.csv", log=log)
 
     if not res:  # empty file
-        log.info('End the pipeline.')
+        log.info("End the pipeline.")
         return False
 
     for i in res:
@@ -81,11 +81,11 @@ def check_records():
             and datetime.fromisoformat(i.get("created_at")).date()
             == datetime.today().date()
         ):
-            log.info("Conditions passed. Start scraping after 60 sec.")
-            time.sleep(60)
+            log.info("Conditions passed. Start scraping after 3 min.")
+            time.sleep(180)  # prevent ip banned
             return True
 
-    log.info('End the pipeline.')
+    log.info("End the pipeline.")
     return False
 
 
@@ -159,12 +159,12 @@ with DAG(
     },
     start_date=datetime(2025, 9, 22, 7, 0, tzinfo=local_tz),
     end_date=datetime(2025, 12, 31, 7, 0, tzinfo=local_tz),
-    schedule="0 17 * SEP-DEC SUN",  # dont set when manually trigger
+    schedule="0 8 * SEP-DEC SUN",  # dont set when manually trigger
     catchup=False,
 ):
     # extract
     crawling_task = PythonOperator(
-        task_id="crawl_tgdd",
+        task_id="crawl_urls",
         python_callable=crawling_work,
         op_args=[True],
         retries=3,
@@ -196,14 +196,14 @@ with DAG(
         retry_delay=timedelta(seconds=30),
     )
     gold_tier_task = BashOperator(
-        task_id="define_olap_schema",
+        task_id="build_olap_schema",
         bash_command="cd /home/dbt_c2dwh && dbt run -s models/gold",
         retries=3,
         retry_delay=timedelta(seconds=30),
     )
     creating_marts_task = BashOperator(
         task_id="create_data_marts",
-        bash_command="cd /home/dbt_c2dwh && dbt run -s models/marts",
+        bash_command="cd /home/dbt_c2dwh && dbt run -s models/marts && dbt clean",
         retries=3,
         retry_delay=timedelta(seconds=30),
     )

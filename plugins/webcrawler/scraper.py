@@ -574,7 +574,7 @@ class Scraper:
             specs_data.extend(tags_content)
         except Exception:
             Scraper.logger.warning(
-                f"{url} might be removed from the website. Check again."
+                f"{url} might be an advertising page or removed from the website. Check again."
             )
             async with Scraper.__lock:
                 Scraper.__scraped.add(url)

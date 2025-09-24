@@ -234,7 +234,7 @@ def csv_reader(
             datefmt="%Y-%m-%d %H:%M:%S",
             level=10,
         )
-        log = logging.getLogger('csv_reader')
+        log = logging.getLogger("csv_reader")
 
     if os.path.isdir(path):
         log.error(f"Invalid path. {path} is a directory.")
@@ -287,7 +287,7 @@ def s3_file_uploader(
             datefmt="%Y-%m-%d %H:%M:%S",
             level=10,
         )
-        log = logging.getLogger('s3_file_uploader')
+        log = logging.getLogger("s3_file_uploader")
 
     if os.path.isdir(path):
         log.error(f"Invalid path. {path} is a directory.")
@@ -327,7 +327,7 @@ def athena_sql_executor(
             datefmt="%Y-%m-%d %H:%M:%S",
             level=10,
         )
-        log = logging.getLogger('athena_sql_executor')
+        log = logging.getLogger("athena_sql_executor")
 
     data = {}
     is_select = (
@@ -383,10 +383,7 @@ def athena_sql_executor(
             "CANCELLED",
         ]:
             log.error(
-                f'Execution {data["query_execution_state"]} >>',
-                execution["QueryExecution"]["Status"]
-                .get("AthenaError", {})
-                .get("ErrorMessage"),
+                f'Execution {data["query_execution_state"]} >> {execution["QueryExecution"]["Status"].get("AthenaError", {}).get("ErrorMessage")}',
             )
             return data
         if data["query_execution_state"] == "SUCCEEDED":
@@ -441,7 +438,7 @@ def s3_folder_cleaner(
             datefmt="%Y-%m-%d %H:%M:%S",
             level=10,
         )
-        log = logging.getLogger('s3_folder_cleaner')
+        log = logging.getLogger("s3_folder_cleaner")
 
     # initialize client
     if not client:

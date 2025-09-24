@@ -4,12 +4,11 @@ from airflow.providers.standard.operators.python import (
     PythonOperator,
     ShortCircuitOperator,
 )
-from airflow.providers.standard.sensors.time_delta import TimeDeltaSensor
 from datetime import datetime, timedelta
 from utils.utils import csv_reader, athena_sql_executor
 from webcrawler.crawler import Crawler
 from webcrawler.scraper import Scraper
-import pendulum, asyncio, os, re, logging
+import pendulum, asyncio, os, re, logging, time
 
 
 log = logging.getLogger("airflow_task")
@@ -73,6 +72,7 @@ def check_records():
     res = csv_reader("/home/data/crawled/thegioididong_urls.csv", log=log)
 
     if not res:  # empty file
+        log.info('End the pipeline.')
         return False
 
     for i in res:
@@ -81,8 +81,11 @@ def check_records():
             and datetime.fromisoformat(i.get("created_at")).date()
             == datetime.today().date()
         ):
+            log.info("Conditions passed. Start scraping after 60 sec.")
+            time.sleep(60)
             return True
 
+    log.info('End the pipeline.')
     return False
 
 
@@ -154,9 +157,9 @@ with DAG(
         "retries": 3,
         "retry_delay": timedelta(minutes=3),
     },
-    start_date=datetime(2025, 9, 1, 7, 0, tzinfo=local_tz),
+    start_date=datetime(2025, 9, 22, 7, 0, tzinfo=local_tz),
     end_date=datetime(2025, 12, 31, 7, 0, tzinfo=local_tz),
-    # schedule="0 22 * SEP-DEC SUN",  # dont set when manually testing
+    schedule="0 17 * SEP-DEC SUN",  # dont set when manually trigger
     catchup=False,
 ):
     # extract
@@ -174,7 +177,6 @@ with DAG(
         retries=3,
         retry_delay=timedelta(minutes=3),
     )
-    delay = TimeDeltaSensor(task_id="delay", delta=timedelta(seconds=60))
     checker = ShortCircuitOperator(task_id="check_urls", python_callable=check_records)
 
     # load
@@ -207,5 +209,5 @@ with DAG(
     )
 
     # workflow
-    crawling_task >> checker >> delay >> scraping_task >> bronze_tier_task
+    crawling_task >> checker >> scraping_task >> bronze_tier_task
     bronze_tier_task >> silver_tier_task >> gold_tier_task >> creating_marts_task

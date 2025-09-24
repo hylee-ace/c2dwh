@@ -159,7 +159,7 @@ class Scraper:
 
         return asdict(prd)
 
-    def __parse_specs_info(data: dict, device: str):
+    def __parse_specs_info(data: list[tuple], device: str):
         def cpu():
             value = [
                 j.strip()
@@ -574,7 +574,7 @@ class Scraper:
             specs_data.extend(tags_content)
         except Exception:
             Scraper.logger.warning(
-                f"{url} might be removed from the website. Check again."
+                f"{url} might be an advertisement, not for sale officially or be removed. Check again."
             )
             async with Scraper.__lock:
                 Scraper.__scraped.add(url)

@@ -25,4 +25,5 @@ Crawling to Data warehousing (C2DWH) project involves building crawler and scrap
 ![gold-layer](/docs/assets/c2dwh_gold_layer.png)
 
 ## Set-up
-Read this [**docs**](/docs/demo.md) for more details about how to set up the project.
+Read this [**docs**](/docs/setup.md) for more details about how to set up the project.
+

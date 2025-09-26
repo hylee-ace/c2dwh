@@ -1,9 +1,11 @@
 # Project set-up
 ## 1. AWS
 We need **IAM** user credential and two **S3** buckets, one for staging data and one for storing **Athena** queries results.
+
 ![s3](./assets/buckets.png)
 
 In **Glue** we create three databases representing three layers of data warehouse.
+
 ![db](./assets/db.png)
 
 ## 2. dbt

@@ -14,7 +14,6 @@
 	release_month,
 	url
 	from {{i[0]}}.{{i[1]}}
-	where partition_date = cast(current_date as varchar)
 	{% if not loop.last %}
 	union
 	{% endif %}

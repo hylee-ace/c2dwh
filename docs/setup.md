@@ -141,4 +141,4 @@ and how it looks like in _**dim_product**_.
 
 ![dim_product](./assets/dim_product.png)
 
-You can explore more once you have successfully run this project. If there are any issues or you want me to improve anything in this project, please let me know via *quangduy.huynh.arc97@gmail.com*. I'm glad to take all of your advices.
+You can explore more once you have successfully run this project. If there are any issues or you want me to improve anything in this project, please let me know via *jayhuynh.as97@gmail.com*. I'm glad to take all of your advices.

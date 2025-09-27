@@ -4,6 +4,7 @@ We need **IAM** user credential and two **S3** buckets, one for staging and proc
 ![s3](./assets/buckets.png)
 
 In **Glue** we create three databases representing three layers of data warehouse.
+
 ![db](./assets/db.png)
 
 ## 2. dbt

@@ -1,6 +1,6 @@
 # Project set-up
 ## 1. AWS
-We need **IAM** user credential and two **S3** buckets, one for staging data and one for storing **Athena** queries results.
+We need **IAM** user credential and two **S3** buckets, one for staging and processed data, and the other for **Athena** queries results.
 ![s3](./assets/buckets.png)
 
 In **Glue** we create three databases representing three layers of data warehouse.
@@ -20,7 +20,6 @@ dbt_project_name:
       schema: "default" # default database in glue
       threads: 8
       type: athena
-      # you can directly define IAM user credential here
 
   target: dev # any names you prefer
 ```
@@ -96,4 +95,49 @@ docker compose up -d
 ```
 Don't set **semaphore** in crawler and scraper over **15**, IP could be banned temporarily.
 
-## 5. Final result
+## 5. Run result
+If you set up project correctly you can see the following image and be able to run or trigger the dag.
+
+![dag](./assets/dag.png)
+
+The crawler will continue the previous work (if exists) and only append new found URLs to _**thegioididong_urls.csv**_. The crawling speed depends on speed of internet connection.
+
+![crawl](./assets/crawl_work.png)
+![crawled-urls](./assets/crawled_urls.png)
+
+After crawling if there are new URLs then the pipeline will delay 3 minutes to prevent IP being banned before jumping to scraping work, if not, the pipeline will stop here.
+
+![check-url](./assets/check_urls.png)
+
+The scraper will start after the delay. 
+
+![scrape](./assets/scrape.png)
+![scraped-prd](./assets/scraped_prd.png)
+
+If everything works fine, building staging layer, cleaning data and building schema tasks can run successfully right after scraping work.
+
+![bronze](./assets/bronze.png)
+![silver](./assets/silver.png)
+![gold](./assets/gold.png)
+![mart](./assets/mart.png)
+
+When the all tasks in pipeline finish successfully, you can visit **S3** and **Athena** to check the final result.
+
+![c2dwh-bucket](./assets/main_bucket.png)
+![bronze-layer](./assets/bronze_layer.png)
+![silver-layer](./assets/silver_layer.png)
+![gold-layer](./assets/gold_layer.png)
+
+Here is an example of the raw data about laptops
+
+![raw-laptops](./assets/raw_laptops.png)
+
+and this is how the data looks like after cleaning
+
+![cleaned-laptops](./assets/clean_laptops.png)
+
+and how it looks like in _**dim_product**_.
+
+![dim_product](./assets/dim_product.png)
+
+You can explore more once you have successfully run this project. If there are any issues or you want me to improve anything in this project, please let me know via *quangduy.huynh.arc97@gmail.com*. I'm glad to take all of your advices.

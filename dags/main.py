@@ -151,7 +151,7 @@ def build_bronze_layer():
 
 with DAG(
     "c2dwh_elt_pipeline",
-    description="Pipeline from crawling to building OLAP on Athena",
+    description="Pipeline from crawling to building OLAP on Glue",
     default_args={
         "owner": "Hy Le",
         "retries": 3,

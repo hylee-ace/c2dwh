@@ -26,4 +26,3 @@ Crawling to Data warehousing (C2DWH) project involves building crawler and scrap
 
 ## Set-up
 Read this [**docs**](/docs/setup.md) for more details about how to set up the project.
-

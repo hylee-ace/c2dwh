@@ -3,6 +3,7 @@ from botocore.exceptions import ClientError as AwsClientError
 from botocore.client import BaseClient
 
 
+# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 class Cursor:
     """
     Terminal cursor behaviors.
@@ -13,11 +14,7 @@ class Cursor:
     reveal = "\033[?25h"
 
 
-# classes
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
-# functions
-
-
 def runtime(func: object):
     """
     Decorator for estimating runtime of a process.
@@ -175,19 +172,13 @@ def timetext(second: int | float):
 
 
 def dict_to_csv(
-    data: dict | list[dict], *, path: str, log: logging.Logger | None = None
+    data: dict | list[dict], *, path: str, logger: logging.Logger | None = None
 ):
     """
     Save dict-type or list of dict-type data as CSV file.
     """
 
-    if not log:
-        logging.basicConfig(
-            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            level=10,
-        )
-        log = logging.getLogger("dict_to_csv")
+    log = logging.getLogger("dict_to_csv") if not logger else logger
 
     if path:
         if os.path.isdir(path):
@@ -219,22 +210,15 @@ def csv_reader(
     path: str,
     *,
     fields: str | list[str] | None = None,
-    log: logging.Logger | None = None,
+    logger: logging.Logger | None = None,
 ):
     """
     Read CSV file and return list of dict-type data. Can extract by field names.
     """
 
+    log = logging.getLogger("csv_reader") if not logger else logger
     data = []
     header = []
-
-    if not log:
-        logging.basicConfig(
-            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            level=10,
-        )
-        log = logging.getLogger("csv_reader")
 
     if os.path.isdir(path):
         log.error(f"Invalid path. {path} is a directory.")
@@ -275,19 +259,13 @@ def s3_file_uploader(
     client: BaseClient | None = None,
     bucket: str,
     key: str,
-    log: logging.Logger | None = None,
+    logger: logging.Logger | None = None,
 ):
     """
     Upload file to AWS S3 bucket basing on given key name.
     """
 
-    if not log:
-        logging.basicConfig(
-            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            level=10,
-        )
-        log = logging.getLogger("s3_file_uploader")
+    log = logging.getLogger("s3_file_uploader") if not logger else logger
 
     if os.path.isdir(path):
         log.error(f"Invalid path. {path} is a directory.")
@@ -315,20 +293,13 @@ def athena_sql_executor(
     database: str | None = None,
     output_location: str | None = None,
     encrypt_config: dict | None = None,
-    log: logging.Logger | None = None,
+    logger: logging.Logger | None = None,
 ):
     """
     Execute SQL query on AWS Athena.
     """
 
-    if not log:
-        logging.basicConfig(
-            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            level=10,
-        )
-        log = logging.getLogger("athena_sql_executor")
-
+    log = logging.getLogger("athena_sql_executor") if not logger else logger
     data = {}
     is_select = (
         True
@@ -426,19 +397,13 @@ def s3_folder_cleaner(
     *,
     client: BaseClient | None = None,
     bucket: str,
-    log: logging.Logger | None = None,
+    logger: logging.Logger | None = None,
 ):
     """
     Free up AWS S3 bucket folder by prefix name. If prefix name is empty, everything in bucket will be removed.
     """
 
-    if not log:
-        logging.basicConfig(
-            format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            level=10,
-        )
-        log = logging.getLogger("s3_folder_cleaner")
+    log = logging.getLogger("s3_folder_cleaner") if not logger else logger
 
     # initialize client
     if not client:

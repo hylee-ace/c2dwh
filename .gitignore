@@ -213,3 +213,4 @@ dbt_c2dwh/dbt_packages/
 dbt_c2dwh/logs/
 config/
 prototype/
+data/

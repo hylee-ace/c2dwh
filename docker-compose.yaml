@@ -1,5 +1,5 @@
 x-airflow-common: &airflow-common
-  image: c2dwh:1.0
+  image: c2dwh-airflow:2.0
   build: .
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -18,10 +18,10 @@ x-airflow-common: &airflow-common
     AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
     AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
   volumes:
-    - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/logs
-    - ./config:/opt/airflow/config
-    - ./plugins:/opt/airflow/plugins
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/config:/opt/airflow/config
+    - ./airflow/plugins:/opt/airflow/plugins
     - ./data:/home/data # the crawled and scraped data
     - ./dbt_c2dwh:/home/dbt_c2dwh # dbt project for olap
   user: "${AIRFLOW_UID}:0"

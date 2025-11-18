@@ -1,3 +1,4 @@
+import pendulum, asyncio, os, re, logging, time
 from airflow.sdk import DAG
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.python import (
@@ -5,14 +6,15 @@ from airflow.providers.standard.operators.python import (
     ShortCircuitOperator,
 )
 from datetime import datetime, timedelta
-from utils.utils import csv_reader, athena_sql_executor
-from webcrawler.crawler import Crawler
-from webcrawler.scraper import Scraper
-import pendulum, asyncio, os, re, logging, time
+from utils import csv_reader, athena_sql_executor
+from webcrawler import Crawler
+from webcrawler import Scraper
 
 
-log = logging.getLogger("airflow_task")
+# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
+log = logging.getLogger("airflow")
+logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
 def crawling_work(upload_to_s3: bool = False):
@@ -33,7 +35,6 @@ def crawling_work(upload_to_s3: bool = False):
         save_in="/home/data/crawled",
         upload_to_s3=upload_to_s3,
         s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "crawled/"},
-        log=log,
     )
 
     asyncio.run(
@@ -49,13 +50,15 @@ def crawling_work(upload_to_s3: bool = False):
 def scraping_work(upload_to_s3: bool = False):
     log.info("Start scraping process...")
 
-    urls = [i["url"] for i in csv_reader("/home/data/crawled/thegioididong_urls.csv")]
+    urls = [
+        i["url"]
+        for i in csv_reader("/home/data/crawled/thegioididong_urls.csv", logger=log)
+    ]
     scraper = Scraper(
         urls,
         save_in="/home/data/scraped",
         upload_to_s3=upload_to_s3,
         s3_attrs={"bucket": "crawling-to-dwh", "obj_prefix": "bronze/"},
-        log=log,
     )
 
     asyncio.run(
@@ -69,7 +72,7 @@ def scraping_work(upload_to_s3: bool = False):
 
 
 def check_records():
-    res = csv_reader("/home/data/crawled/thegioididong_urls.csv", log=log)
+    res = csv_reader("/home/data/crawled/thegioididong_urls.csv", logger=log)
 
     if not res:  # empty file
         log.info("End the pipeline.")
@@ -123,7 +126,7 @@ def build_bronze_layer():
 
     log.info(f"Start creating tables in {database}...")
     for i in range(len(queries)):
-        resp = athena_sql_executor(queries[i], database=database, log=log)
+        resp = athena_sql_executor(queries[i], database=database, logger=log)
 
         if resp.get("query_execution_state") == "SUCCEEDED":
             log.info(f"Create {tables_meta[i][0]} successfully.")
@@ -137,7 +140,7 @@ def build_bronze_layer():
             f"alter table {i[0]} add partition (partition_date = '{datetime.today().date()}') "
             + f"location '{i[1]}date={datetime.today().date()}'",
             database=database,
-            log=log,
+            logger=log,
         )
 
         if resp.get("query_execution_state") == "SUCCEEDED":

@@ -1,8 +1,15 @@
 import asyncio, httpx, os, re, logging
-from utils.utils import dict_to_csv, s3_file_uploader
+from utils import dict_to_csv, s3_file_uploader
 from lxml import html
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
+
+
+# ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
+log = logging.getLogger("crawler")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
+logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
 
 
 class Crawler:
@@ -21,8 +28,6 @@ class Crawler:
         For uploading result file to AWS S3 bucket (default: **False**).
     s3_attrs: dict, optional
         Provide S3 attributes such as **client** (optional), **bucket** and **obj_prefix** for uploading (default: **None**).
-    log: logger, optional
-        For logging
     """
 
     base_url = None
@@ -35,7 +40,6 @@ class Crawler:
     upload_to_s3 = False
     s3_attrs = dict()
     __lock = asyncio.Lock()
-    logger = None  # for logging
 
     def __init__(
         self,
@@ -45,21 +49,10 @@ class Crawler:
         save_in: str | None = None,
         upload_to_s3: bool = False,
         s3_attrs: dict | None = None,
-        log: logging.Logger | None = None,
     ):
         Crawler.base_url = base_url
         Crawler.search = search
         Crawler.__queue.add(base_url)
-
-        if not log:
-            logging.basicConfig(
-                format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-                level=10,
-            )
-            Crawler.logger = logging.getLogger("crawler")
-        else:
-            Crawler.logger = log
 
         if save_in:
             Crawler.saving_path = os.path.join(
@@ -77,12 +70,12 @@ class Crawler:
 
         if upload_to_s3:
             if not save_in:
-                Crawler.logger.error(
+                log.error(
                     "Cannot locate output file for uploading since 'save_in' is missing."
                 )
                 exit(1)
             if not s3_attrs:  # not provide s3 attributes
-                Crawler.logger.error(
+                log.error(
                     "S3 attributes such as client (optional), bucket and obj_prefix are required."
                 )
                 exit(1)
@@ -92,7 +85,7 @@ class Crawler:
                     for i in s3_attrs.keys()
                 ]
             ):  # giving invalid attrs
-                Crawler.logger.error("Invalid S3 attributes.")
+                log.error("Invalid S3 attributes.")
                 exit(1)
 
             Crawler.upload_to_s3 = upload_to_s3
@@ -109,24 +102,17 @@ class Crawler:
         encoding: str | None = None,
         retries: int = 3,
         retry_delay: float = 2.0,
-        log: logging.Logger | None = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Asynchronously inspect HTML content from given URL. **limit_content_in** is used for reducing
         encoded response content when inspecting which helps inspect efficiently.
         """
 
+        log = logging.getLogger("async_inspect") if not logger else logger
         last_exception = None
         resp = None
         content = None
-
-        if not log:
-            logging.basicConfig(
-                format="[%(asctime)s] [%(name)s] %(levelname)s - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-                level=10,
-            )
-            log = logging.getLogger("async_inspect")
 
         if limit_content_in and not encoding:
             log.error(
@@ -225,7 +211,7 @@ class Crawler:
             semaphore=semaphore,
             limit_content_in=r"<a[^>]*href[^>]*>.*?</a>",
             encoding="utf-8",
-            log=Crawler.logger,
+            logger=log,
         )
 
         if not found:  # url might be broken or facing IP banned
@@ -252,7 +238,7 @@ class Crawler:
                             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         },
                         path=Crawler.saving_path,
-                        log=Crawler.logger,
+                        logger=log,
                     )  # only save new valid urls
 
             Crawler.__crawled.update(result)  # also put found urls into crawled
@@ -333,7 +319,7 @@ class Crawler:
                 if delay:
                     await asyncio.sleep(delay)  # delay between chunks
 
-                Crawler.logger.debug(
+                log.debug(
                     f"From: {cls.base_url} | Pending: {len(cls.__queue)} | Crawled: {len(cls.__crawled)} | Valid: {len(cls.result)}"
                 )
 
@@ -345,8 +331,8 @@ class Crawler:
                 else "(No more urls found)"
             )
 
-        Crawler.logger.info("Crawling successfully.")
-        Crawler.logger.info(
+        log.info("Crawling successfully.")
+        log.info(
             f"From: {cls.base_url} | Crawled: {len(cls.__crawled)} | Valid: {len(cls.result)} {text if cls.__history else ''}",
         )
 
@@ -357,25 +343,23 @@ class Crawler:
                 filename = os.path.basename(cls.saving_path)
                 key = f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}{filename}"
 
-                Crawler.logger.info(f"Start uploading {filename} to {bucket}...")
+                log.info(f"Start uploading {filename} to {bucket}...")
                 s3_file_uploader(
                     cls.saving_path,
                     client=cls.s3_attrs.get("client"),
                     bucket=bucket,
                     key=key,
-                    log=Crawler.logger,
+                    logger=log,
                 )
-                Crawler.logger.info(f"Uploading {filename} successfully.")
+                log.info(f"Uploading {filename} successfully.")
             else:
-                Crawler.logger.info("Uploading cancelled since no more urls found.")
+                log.info("Uploading cancelled since no more urls found.")
 
     def __history_check():
         if not os.path.isfile(Crawler.saving_path):
             return
 
-        Crawler.logger.info(
-            f"Previous work with {Crawler.base_url} detected. Continuing..."
-        )
+        log.info(f"Previous work with {Crawler.base_url} detected. Continuing...")
 
         try:
             with open(Crawler.saving_path, "r") as file:
@@ -386,9 +370,9 @@ class Crawler:
                     Crawler.result.add(url)
                     Crawler.__queue.add(url)
                     Crawler.__crawled.add(url)
-            Crawler.logger.info("History updated.")
+            log.info("History updated.")
         except Exception as e:
-            Crawler.logger.error(f"Error occurs while opening file >> {e}")
+            log.error(f"Error occurs while opening file >> {e}")
 
     @classmethod
     def reset(cls):
@@ -396,7 +380,7 @@ class Crawler:
         Reset crawler after use.
         """
 
-        Crawler.logger.info(f"Crawler for {urlparse(cls.base_url).hostname} reset.")
+        log.info(f"Crawler for {urlparse(cls.base_url).hostname} reset.")
 
         if cls.saving_path:
             cls.saving_path = None

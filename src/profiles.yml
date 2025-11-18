@@ -1,0 +1,12 @@
+dbt_c2dwh:
+  outputs:
+    dev:
+      database: AwsDataCatalog
+      region_name: us-east-1
+      s3_data_dir: s3://crawling-to-dwh/
+      s3_staging_dir: s3://c2dwh-athena-queries/ # bucket for athena query
+      schema: "default" # default database in glue
+      threads: 8
+      type: athena
+
+  target: dev

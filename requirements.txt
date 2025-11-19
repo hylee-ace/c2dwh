@@ -1,5 +1,0 @@
-asyncio
-boto3
-dbt-athena-community
-dbt-core
-lxml

@@ -214,3 +214,5 @@ dbt_c2dwh/logs/
 config/
 prototype/
 data/
+test_data/
+note.*

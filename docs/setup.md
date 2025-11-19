@@ -69,13 +69,13 @@ sources:
 I created **dbt** project on local machine before containerizing, you can edit the **dags** to initialize it while building **docker** image if you want to.
 
 ## 3. Docker and Airflow
-Copy your previous _**profiles.yml**_ setup to docker container.
+Copy your previous _**profiles.yml**_ setup to docker container. This step is crucial for **dbt** to recognize initial environment.
 
 ```docker
 COPY /your-path/profiles.yml /home/airflow/.dbt/
 ```
 
-Also mount **dbt** project to container.
+Also mount **dbt** project and necessary directories to container.
 
 ```yaml
 volumes:

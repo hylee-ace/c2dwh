@@ -1,14 +1,16 @@
 import httpx, json, asyncio, os, re, logging
 from .crawler import Crawler
 from .models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphones, Screen
-from utils import dict_to_csv, s3_file_uploader
+from ..utils import dict_to_csv, s3_file_uploader
 from urllib.parse import urlparse
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from dataclasses import asdict
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 log = logging.getLogger("scraper")
+log.setLevel(logging.DEBUG)
 
 
 class Scraper:
@@ -89,7 +91,9 @@ class Scraper:
             price=int(data["offers"]["price"]),
             brand=data["brand"]["name"][0].strip(),
             url=data["url"].strip(),
-            updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            updated_at=datetime.now(tz=ZoneInfo("Asia/Ho_Chi_Minh")).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),  # for precise time
         )
 
         if data["aggregateRating"]:

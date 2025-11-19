@@ -24,6 +24,7 @@ x-airflow-common: &airflow-common
     - ./airflow/plugins:/opt/airflow/plugins
     - ./data:/home/data # the crawled and scraped data
     - ./dbt_c2dwh:/home/dbt_c2dwh # dbt project for olap
+    - ./sql:/home/sql # sql queries for bronze layer
   user: "${AIRFLOW_UID}:0"
   depends_on: &airflow-common-depends-on
     redis:

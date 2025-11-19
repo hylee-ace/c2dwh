@@ -1,12 +1,14 @@
 import asyncio, httpx, os, re, logging
-from utils import dict_to_csv, s3_file_uploader
+from ..utils import dict_to_csv, s3_file_uploader
 from lxml import html
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
 log = logging.getLogger("crawler")
+log.setLevel(logging.DEBUG)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
 logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
@@ -235,7 +237,11 @@ class Crawler:
                     dict_to_csv(
                         {
                             "url": url,
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "created_at": datetime.now(
+                                tz=ZoneInfo("Asia/Ho_Chi_Minh")
+                            ).strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            ),  # for precise time
                         },
                         path=Crawler.saving_path,
                         logger=log,

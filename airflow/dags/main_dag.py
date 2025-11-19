@@ -6,15 +6,19 @@ from airflow.providers.standard.operators.python import (
     ShortCircuitOperator,
 )
 from datetime import datetime, timedelta
-from utils import csv_reader, athena_sql_executor
-from webcrawler import Crawler
-from webcrawler import Scraper
+from c2dwh.utils import csv_reader, athena_sql_executor
+from c2dwh.webcrawler import Crawler, Scraper
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
+"""
+** ALL PATHS BEING USED IN DAGS ARE FROM AIRFLOW IMAGE, DOUBLE-CHECK IN DOCKER-COMPOSE OR DOCKERFILE.
+** EDIT logging_level IN airflow.cfg FOR MORE DETAILS IF NEEDED.
+** SET chunksize AND Semaphore VALUE CAREFULLY TO AVOID BEING BANNED BY WEBSITE.
+"""
+
 local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
-log = logging.getLogger("airflow")
-logging.getLogger("asyncio").setLevel(logging.WARNING)
+log = logging.getLogger("airflow_task")
 
 
 def crawling_work(upload_to_s3: bool = False):
@@ -40,8 +44,8 @@ def crawling_work(upload_to_s3: bool = False):
     asyncio.run(
         crawler.execute(
             timeout=20.0,
-            chunksize=11,
-            semaphore=asyncio.Semaphore(11),
+            chunksize=5,
+            semaphore=asyncio.Semaphore(5),
         )
     )
     crawler.reset()
@@ -64,8 +68,8 @@ def scraping_work(upload_to_s3: bool = False):
     asyncio.run(
         scraper.execute(
             timeout=20.0,
-            chunksize=11,
-            semaphore=asyncio.Semaphore(11),
+            chunksize=5,
+            semaphore=asyncio.Semaphore(5),
         )
     )
     scraper.reset()
@@ -84,8 +88,8 @@ def check_records():
             and datetime.fromisoformat(i.get("created_at")).date()
             == datetime.today().date()
         ):
-            log.info("Conditions passed. Start scraping after 3 min.")
-            time.sleep(180)  # prevent ip banned
+            log.info("Conditions passed. Start scraping after 5 min.")
+            time.sleep(300)  # prevent ip banned
             return True
 
     log.info("End the pipeline.")
@@ -93,7 +97,7 @@ def check_records():
 
 
 def build_bronze_layer():
-    files_location = "/opt/airflow/plugins/sql"
+    files_location = "/home/sql"
     database = "c2dwh_bronze"
     queries = []
     tables_meta = []
@@ -150,8 +154,6 @@ def build_bronze_layer():
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
-
-
 with DAG(
     "c2dwh_elt_pipeline",
     description="Pipeline from crawling to building OLAP on Glue",
@@ -162,7 +164,7 @@ with DAG(
     },
     start_date=datetime(2025, 9, 22, 7, 0, tzinfo=local_tz),
     end_date=datetime(2025, 12, 31, 7, 0, tzinfo=local_tz),
-    schedule="0 8 * SEP-DEC SUN",  # dont set when manually trigger
+    # schedule="0 8 * SEP-DEC SUN",  # dont set when manually trigger
     catchup=False,
 ):
     # extract

@@ -1,0 +1,6 @@
+[project]
+name = "c2dwh-pipeline"
+version = "1.0.0"
+dependencies = ["asyncio", "boto3", "dbt-athena-community", "dbt-core", "lxml"]
+requires-python = ">=3.12"
+authors = [{ name = "Hy Le", email = "jayhuynh.as97@gmail.com" }]

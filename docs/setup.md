@@ -7,7 +7,29 @@ In **Glue** we create three databases representing three layers of data warehous
 
 ![db](./assets/db.png)
 
-## 2. dbt
+## 2. .env
+Prepare necessary environment variables, especially your **AWS** credentials. You can also export these variables before composing.
+
+```toml
+# add your desired variables
+
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+
+AIRFLOW_UID=50000 # airflow user
+
+_AIRFLOW_WWW_USER_USERNAME=...
+_AIRFLOW_WWW_USER_PASSWORD=...
+_AIRFLOW_WWW_USER_FIRSTNAME=...
+_AIRFLOW_WWW_USER_LASTNAME=...
+_AIRFLOW_WWW_USER_EMAIL=...
+
+POSTGRES_USER=...
+POSTGRES_PASSWORD=...
+POSTGRES_DB=...
+```
+
+## 3. dbt
 Define **AWS** information in _**profiles.yml**_.
 
 ```yaml
@@ -21,6 +43,10 @@ dbt_project_name:
       schema: "default" # default database in glue
       threads: 8
       type: athena
+
+      # in case dbt cannot recognize aws credentials, explicitly define here 
+      aws_access_key_id: ...
+      aws_secret_access_key: ...
 
   target: dev # any names you prefer
 ```
@@ -68,7 +94,7 @@ sources:
 ```
 I created **dbt** project on local machine before containerizing, you can edit the **dags** to initialize it while building **docker** image if you want to.
 
-## 3. Docker and Airflow
+## 4. Docker and Airflow
 Copy your previous _**profiles.yml**_ setup to docker container. This step is crucial for **dbt** to recognize initial environment.
 
 ```docker
@@ -86,8 +112,8 @@ volumes:
     - ./dbt_project_name:/home/dbt_project_name # dbt project
 ```
 
-## 4. Build and run Docker image
-Before building, remember to replace old setup such as bucket names, directory for landing data, etc. in **dags/main.py** by your new setup
+## 5. Build and run Docker image
+Before building, remember to replace old setup such as bucket names, directory for landing data, etc. in ***dags/main_dag.py*** by your new setup
 ```bash
 docker compose up airflow-init -d
 ```
@@ -96,7 +122,7 @@ docker compose up -d
 ```
 Don't set **semaphore** in crawler and scraper over **15**, IP could be banned temporarily.
 
-## 5. Run result
+## 6. Final result
 If you set up project correctly you can see the following image and be able to run or trigger the dag.
 
 ![dag](./assets/dag.png)

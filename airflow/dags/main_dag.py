@@ -1,13 +1,14 @@
-import pendulum, asyncio, os, re, logging, time
+import pendulum, asyncio, re, logging, time
+from datetime import datetime, timedelta
+from pathlib import Path
+from c2dwh.utils import csv_reader, athena_sql_executor
+from c2dwh.webcrawler import Crawler, Scraper
 from airflow.sdk import DAG
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.python import (
     PythonOperator,
     ShortCircuitOperator,
 )
-from datetime import datetime, timedelta
-from c2dwh.utils import csv_reader, athena_sql_executor
-from c2dwh.webcrawler import Crawler, Scraper
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
@@ -102,19 +103,16 @@ def build_bronze_layer():
     queries = []
     tables_meta = []
 
-    if os.path.isfile(files_location):
-        log.error(f"Invalid path. {files_location} is a file.")
+    if Path(files_location).is_file():
+        log.error(f"Please provide a file path, not directory..")
         return
-    if not os.path.exists(files_location):
+    if not Path(files_location).exists():
         log.error(f"No such directory named {files_location}.")
         return
 
-    for root, _, files in os.walk(files_location):
-        for i in files:
-            if not i.endswith(".sql"):  # only read sql files
-                continue
-            with open(os.path.join(root, i), "r") as file:
-                queries.append(file.read())
+    for i in Path(files_location).rglob("*.sql"):
+        with i.open("r") as file:
+            queries.append(file.read())
 
     # extract metadata
     for i in queries:

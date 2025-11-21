@@ -1,4 +1,5 @@
-import asyncio, httpx, os, re, logging
+import asyncio, httpx, re, logging
+from pathlib import Path
 from ..utils import dict_to_csv, s3_file_uploader
 from lxml import html
 from urllib.parse import urljoin, urlparse
@@ -57,17 +58,17 @@ class Crawler:
         Crawler.__queue.add(base_url)
 
         if save_in:
-            Crawler.saving_path = os.path.join(
-                save_in,
-                "".join(
+            Crawler.saving_path = (
+                Path(save_in)
+                / f"{''.join(
                     [
                         i
                         for i in urlparse(base_url).hostname.split(".")
                         if i not in ["com", "vn", "www"]
                     ]
-                )
-                + "_urls.csv",
+                )}_urls.csv"
             )
+
             Crawler.__history_check()
 
         if upload_to_s3:
@@ -201,15 +202,17 @@ class Crawler:
             log.error(f"Error occurs while inspecting {url} >> {e}")
             return
 
+    @classmethod
     async def __crawl(
+        cls,
         url: str,
         client: httpx.AsyncClient,
         semaphore: asyncio.Semaphore,
     ):
-        found = await Crawler.async_inspect(
+        found = await cls.async_inspect(
             url,
             client=client,
-            xpath=Crawler.search,
+            xpath=cls.search,
             semaphore=semaphore,
             limit_content_in=r"<a[^>]*href[^>]*>.*?</a>",
             encoding="utf-8",
@@ -217,23 +220,23 @@ class Crawler:
         )
 
         if not found:  # url might be broken or facing IP banned
-            async with Crawler.__lock:
-                Crawler.__queue.remove(url)
+            async with cls.__lock:
+                cls.__queue.remove(url)
             return
 
-        result = [str(urljoin(Crawler.base_url, i)).strip() for i in found]
+        result = [str(urljoin(cls.base_url, i)).strip() for i in found]
 
         # update results
-        async with Crawler.__lock:
-            Crawler.__queue.remove(url)  # remove inspected url
-            Crawler.__queue.update(
-                i for i in result if i not in Crawler.__crawled
+        async with cls.__lock:
+            cls.__queue.remove(url)  # remove inspected url
+            cls.__queue.update(
+                i for i in result if i not in cls.__crawled
             )  # put new urls into queue for inspecting
 
-            if url not in Crawler.__history:
-                Crawler.__crawled.add(url)  # put inspected url into crawled
-                Crawler.result.add(url)  # only save valid urls
-                if Crawler.saving_path:
+            if url not in cls.__history:
+                cls.__crawled.add(url)  # put inspected url into crawled
+                cls.result.add(url)  # only save valid urls
+                if cls.saving_path:
                     dict_to_csv(
                         {
                             "url": url,
@@ -243,11 +246,11 @@ class Crawler:
                                 "%Y-%m-%d %H:%M:%S"
                             ),  # for precise time
                         },
-                        path=Crawler.saving_path,
+                        path=cls.saving_path,
                         logger=log,
                     )  # only save new valid urls
 
-            Crawler.__crawled.update(result)  # also put found urls into crawled
+            cls.__crawled.update(result)  # also put found urls into crawled
 
     @classmethod
     async def execute(
@@ -346,7 +349,7 @@ class Crawler:
         if cls.upload_to_s3 and cls.s3_attrs:
             if len(cls.result - cls.__history) > 0:
                 bucket = cls.s3_attrs["bucket"]
-                filename = os.path.basename(cls.saving_path)
+                filename = Path(cls.saving_path).name
                 key = f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}{filename}"
 
                 log.info(f"Start uploading {filename} to {bucket}...")
@@ -361,21 +364,22 @@ class Crawler:
             else:
                 log.info("Uploading cancelled since no more urls found.")
 
-    def __history_check():
-        if not os.path.isfile(Crawler.saving_path):
+    @classmethod
+    def __history_check(cls):
+        if not cls.saving_path.is_file():
             return
 
-        log.info(f"Previous work with {Crawler.base_url} detected. Continuing...")
+        log.info(f"Previous work with {cls.base_url} detected. Continuing...")
 
         try:
-            with open(Crawler.saving_path, "r") as file:
+            with cls.saving_path.open("r") as file:
                 next(file)
                 for i in file:
                     url = str(i).split(",")[0]
-                    Crawler.__history.add(url)
-                    Crawler.result.add(url)
-                    Crawler.__queue.add(url)
-                    Crawler.__crawled.add(url)
+                    cls.__history.add(url)
+                    cls.result.add(url)
+                    cls.__queue.add(url)
+                    cls.__crawled.add(url)
             log.info("History updated.")
         except Exception as e:
             log.error(f"Error occurs while opening file >> {e}")

@@ -1,4 +1,5 @@
 import threading, time, functools, inspect, os, csv, boto3, re, logging
+from pathlib import Path
 from botocore.exceptions import ClientError as AwsClientError
 from botocore.client import BaseClient
 
@@ -15,6 +16,9 @@ class Cursor:
 
 
 # ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** ********** #
+CWD = Path.cwd()  # project path
+
+
 def runtime(func: object):
     """
     Decorator for estimating runtime of a process.
@@ -179,21 +183,28 @@ def dict_to_csv(
     """
 
     log = logging.getLogger("dict_to_csv") if not logger else logger
+    actual_path = None
 
+    # validate the path
     if path:
-        if os.path.isdir(path):
-            log.error(f"Invalid path. {path} is a directory.")
+        actual_path = CWD / path
+        if actual_path.is_dir():
+            log.error("Please provide a file path, not directory.")
             return
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if actual_path.suffix != ".csv":
+            log.error("Only accept .csv extension.")
+            return
+        actual_path.parent.mkdir(parents=True, exist_ok=True)
     else:
-        log.error("Invalid path.")
+        log.error("File path is missing.")
         return
 
-    mode = "a" if os.path.exists(path) and os.path.getsize(path) else "w"
+    # switch modes and identify csv header
+    mode = "a" if actual_path.exists() and actual_path.stat().st_size > 0 else "w"
     header = data.keys() if isinstance(data, dict) else data[0].keys()
 
     try:
-        with open(path, mode) as file:
+        with actual_path.open(mode) as file:
             writer = csv.DictWriter(file, header)
             if mode == "w":
                 writer.writeheader()
@@ -217,13 +228,19 @@ def csv_reader(
     """
 
     log = logging.getLogger("csv_reader") if not logger else logger
+    actual_path = CWD / path
     data = []
     header = []
 
-    if os.path.isdir(path):
-        log.error(f"Invalid path. {path} is a directory.")
+    # validate the path
+    if actual_path.is_dir():
+        log.error(f"Please provide a file path, not directory.")
+        return
+    if not path:
+        log.error("File path is missing.")
         return
 
+    # choose selected fields
     if fields:
         if isinstance(fields, str):
             header.append(fields)
@@ -232,7 +249,7 @@ def csv_reader(
 
     try:
         if header:
-            with open(path, "r") as file:
+            with actual_path.open("r") as file:
                 reader = csv.DictReader(file, skipinitialspace=True)
                 for i in reader:
                     new = {}
@@ -243,12 +260,12 @@ def csv_reader(
                         new[j] = i[j]
                     data.append(new)
         else:
-            with open(path, "r") as file:
+            with actual_path.open("r") as file:
                 reader = csv.DictReader(file, skipinitialspace=True)
                 for i in reader:
                     data.append(i)
     except Exception as e:
-        log.error(f"Cannot read {path} >> {e}")
+        log.error(f"Cannot read {actual_path.name} >> {e}")
     finally:
         return data
 
@@ -266,24 +283,29 @@ def s3_file_uploader(
     """
 
     log = logging.getLogger("s3_file_uploader") if not logger else logger
+    actual_path = CWD / path
 
-    if os.path.isdir(path):
-        log.error(f"Invalid path. {path} is a directory.")
+    # validate the path
+    if actual_path.is_dir():
+        log.error(f"Please provide a file path, not directory.")
+        return
+    if not path:
+        log.error("File path is missing.")
         return
 
     # initialize client
     if not client:
         client = boto3.client(
             "s3",
-            region_name="us-east-1",
+            region_name=os.getenv("AWS_REGION"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
 
     try:
-        client.upload_file(Filename=path, Bucket=bucket, Key=key)
+        client.upload_file(Filename=actual_path, Bucket=bucket, Key=key)
     except AwsClientError as e:
-        log.error(f"Cannot upload {os.path.basename(path)} >> {e.response}")
+        log.error(f"Cannot upload {actual_path.name} >> {e.response}")
 
 
 def athena_sql_executor(
@@ -311,7 +333,7 @@ def athena_sql_executor(
     if not client:
         client = boto3.client(
             "athena",
-            region_name="us-east-1",
+            region_name=os.getenv("AWS_REGION"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
@@ -409,7 +431,7 @@ def s3_folder_cleaner(
     if not client:
         client = boto3.client(
             "s3",
-            region_name="us-east-1",
+            region_name=os.getenv("AWS_REGION"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )

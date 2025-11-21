@@ -1,4 +1,5 @@
-import httpx, json, asyncio, os, re, logging
+import httpx, json, asyncio, re, logging
+from pathlib import Path
 from .crawler import Crawler
 from .models import ProductInfo, Phone, Tablet, Laptop, Watch, Earphones, Screen
 from ..utils import dict_to_csv, s3_file_uploader
@@ -508,7 +509,9 @@ class Scraper:
                     "weight": weight(),
                 }
 
+    @classmethod
     async def __scrape(
+        cls,
         url: str,
         client: httpx.AsyncClient,
         semaphore: asyncio.Semaphore,
@@ -529,9 +532,9 @@ class Scraper:
                 not re.findall(r"/man-hinh-may-tinh/", url),
             ]
         ):
-            async with Scraper.__lock:
-                Scraper.__scraped.add(url)
-                Scraper.__queue.discard(url)
+            async with cls.__lock:
+                cls.__scraped.add(url)
+                cls.__queue.discard(url)
             return
         try:
             fetched = await Crawler.async_inspect(
@@ -570,93 +573,95 @@ class Scraper:
             log.warning(
                 f"{url} might be an advertisement, not for sale officially or be removed. Check again."
             )
-            async with Scraper.__lock:
-                Scraper.__scraped.add(url)
-                Scraper.__queue.discard(url)
+            async with cls.__lock:
+                cls.__scraped.add(url)
+                cls.__queue.discard(url)
             return
 
         # parse product info
         match url.split("/")[3]:
             case "dtdd":
                 product = Phone(
-                    **Scraper.__parse_common_info(full_data),
-                    **Scraper.__parse_specs_info(specs_data, "phone"),
+                    **cls.__parse_common_info(full_data),
+                    **cls.__parse_specs_info(specs_data, "phone"),
                 )
-                path = os.path.join(
-                    Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_phones_{datetime.today().date()}.csv",
+                path = (
+                    Path(cls.saving_dir)
+                    / f"{cls.__retailer.lower()}_phones_{datetime.today().date()}.csv"
                 )
-                if not Scraper.__saving_paths.get(path):
-                    Scraper.__saving_paths[path] = 0
+
+                if not cls.__saving_paths.get(path):
+                    cls.__saving_paths[path] = 0
             case "laptop":
                 product = Laptop(
-                    **Scraper.__parse_common_info(full_data),
-                    **Scraper.__parse_specs_info(specs_data, "laptop"),
+                    **cls.__parse_common_info(full_data),
+                    **cls.__parse_specs_info(specs_data, "laptop"),
                 )
-                path = os.path.join(
-                    Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_laptops_{datetime.today().date()}.csv",
+                path = (
+                    Path(cls.saving_dir)
+                    / f"{cls.__retailer.lower()}_laptops_{datetime.today().date()}.csv"
                 )
-                if not Scraper.__saving_paths.get(path):
-                    Scraper.__saving_paths[path] = 0
+
+                if not cls.__saving_paths.get(path):
+                    cls.__saving_paths[path] = 0
             case "may-tinh-bang":
                 product = Tablet(
-                    **Scraper.__parse_common_info(full_data),
-                    **Scraper.__parse_specs_info(specs_data, "tablet"),
+                    **cls.__parse_common_info(full_data),
+                    **cls.__parse_specs_info(specs_data, "tablet"),
                 )
-                path = os.path.join(
-                    Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_tablets_{datetime.today().date()}.csv",
+                path = (
+                    Path(cls.saving_dir)
+                    / f"{cls.__retailer.lower()}_tablets_{datetime.today().date()}.csv"
                 )
-                if not Scraper.__saving_paths.get(path):
-                    Scraper.__saving_paths[path] = 0
+                if not cls.__saving_paths.get(path):
+                    cls.__saving_paths[path] = 0
             case "dong-ho-thong-minh":
                 product = Watch(
-                    **Scraper.__parse_common_info(full_data),
-                    **Scraper.__parse_specs_info(specs_data, "watch"),
+                    **cls.__parse_common_info(full_data),
+                    **cls.__parse_specs_info(specs_data, "watch"),
                 )
-                path = os.path.join(
-                    Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_watches_{datetime.today().date()}.csv",
+                path = (
+                    Path(cls.saving_dir)
+                    / f"{cls.__retailer.lower()}_watches_{datetime.today().date()}.csv"
                 )
-                if not Scraper.__saving_paths.get(path):
-                    Scraper.__saving_paths[path] = 0
+                if not cls.__saving_paths.get(path):
+                    cls.__saving_paths[path] = 0
             case "tai-nghe":
                 product = Earphones(
-                    **Scraper.__parse_common_info(full_data),
-                    **Scraper.__parse_specs_info(specs_data, "earphones"),
+                    **cls.__parse_common_info(full_data),
+                    **cls.__parse_specs_info(specs_data, "earphones"),
                 )
-                path = os.path.join(
-                    Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_earphones_{datetime.today().date()}.csv",
+                path = (
+                    Path(cls.saving_dir)
+                    / f"{cls.__retailer.lower()}_earphones_{datetime.today().date()}.csv"
                 )
-                if not Scraper.__saving_paths.get(path):
-                    Scraper.__saving_paths[path] = 0
+                if not cls.__saving_paths.get(path):
+                    cls.__saving_paths[path] = 0
             case "man-hinh-may-tinh":
                 product = Screen(
-                    **Scraper.__parse_common_info(full_data),
-                    **Scraper.__parse_specs_info(specs_data, "screen"),
+                    **cls.__parse_common_info(full_data),
+                    **cls.__parse_specs_info(specs_data, "screen"),
                 )
-                path = os.path.join(
-                    Scraper.saving_dir,
-                    f"{Scraper.__retailer.lower()}_screens_{datetime.today().date()}.csv",
+                path = (
+                    Path(cls.saving_dir)
+                    / f"{cls.__retailer.lower()}_screens_{datetime.today().date()}.csv"
                 )
-                if not Scraper.__saving_paths.get(path):
-                    Scraper.__saving_paths[path] = 0
+                if not cls.__saving_paths.get(path):
+                    cls.__saving_paths[path] = 0
 
         # update results
-        async with Scraper.__lock:
-            Scraper.__scraped.add(url)
-            Scraper.__queue.discard(url)
-            Scraper.result.append(asdict(product))
+        async with cls.__lock:
+            cls.__scraped.add(url)
+            cls.__queue.discard(url)
+            cls.result.append(asdict(product))
 
-            if Scraper.saving_dir:
-                if os.path.exists(path):  # remove duplicate files in a same date
-                    if Scraper.__saving_paths[path] == 0 and os.path.getsize(path):
-                        os.remove(path)
-                        Scraper.__saving_paths.update({path: 1})  # update file status
+            if cls.saving_dir:
+                if path.exists():  # remove duplicate files in a same date
+                    if cls.__saving_paths[path] == 0 and path.stat().st_size > 0:
+                        path.unlink()
+                        cls.__saving_paths.update({path: 1})  # update file status
                 else:
-                    Scraper.__saving_paths.update({path: 1})
+                    cls.__saving_paths.update({path: 1})
 
                 dict_to_csv(asdict(product), path=path, logger=log)
 
@@ -752,7 +757,7 @@ class Scraper:
 
             # uploading work
             def upload(file: str, bucket: str, key: str):
-                fname = os.path.basename(file)
+                fname = Path(file).name
                 log.info(f"Start uploading {fname} to {bucket}...")
                 s3_file_uploader(
                     file,
@@ -763,8 +768,8 @@ class Scraper:
                 )
                 log.info(f"Uploading {fname} successfully.")
 
-            for i in Scraper.__saving_paths:
-                filename = os.path.basename(i)
+            for i in cls.__saving_paths:
+                filename = Path(i).name
                 key = (
                     f"{cls.s3_attrs['obj_prefix'] if cls.s3_attrs.get('obj_prefix') else ''}"
                     + f"{filename.split('_')[1]}/"
@@ -782,7 +787,7 @@ class Scraper:
         Reset scraper after use.
         """
 
-        log.info(f"Scraper for {Scraper.__retailer} reset.")
+        log.info(f"Scraper for {cls.__retailer} reset.")
 
         if cls.saving_dir:
             cls.saving_dir = None
